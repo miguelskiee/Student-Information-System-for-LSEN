@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIS for Learners with Special Needs</title>
+  <link rel="stylesheet" href="../styles/index.css" />
+</head>
+<body>
+  <div id="page-content">
+    <nav class="navbar">
+      <div class="navbar-logo">
+        <img src="../assets/school_pics/sagadl.png" alt="SIS Logo">
+        <div class="navbar-title">Sagad High School Student Information System for LSEN</div>
+      </div>
+ 
+      <div class="navbar-links">
+        <a href="#" id="loginBtn">Login</a>
+        <a href="#">Teachers</a>
+        <a href="#">About</a>
+      </div>
+    </nav>
+  <div class="landing-wrapper">
+    <div class="logo-section">
+      <img src="../assets/school_pics/sagadl.png" alt="Sagad High School Logo" class="school-logo">
+    </div>
+
+    <div class="image-section">
+      <div class="background-box"></div>
+      <img src="../assets/school_pics/sagadbldg.jfif" alt="Sagad High School Building" class="school-image">
+    </div>
+  </div>
+  </div>
+
+  <!-- LOGIN MODAL -->
+  <div class="login-modal" id="loginModal">
+    <div class="login-box">
+      <h2>Login</h2>
+      <input type="text" placeholder="Username" />
+      <input type="password" placeholder="Password" />
+      <button id="loginSubmit">Login</button>
+      <button class="close-btn" id="closeModal">Close</button>
+    </div>
+  </div>
+
+  <script>
+    const loginBtn = document.getElementById('loginBtn');
+    const loginModal = document.getElementById('loginModal');
+    const pageContent = document.getElementById('page-content');
+    const closeModal = document.getElementById('closeModal');
+    const loginSubmit = document.getElementById('loginSubmit');
+
+    loginBtn.addEventListener('click', () => {
+      loginModal.style.display = 'flex';
+      pageContent.classList.add('blurred');
+    });
+
+    closeModal.addEventListener('click', () => {
+      loginModal.style.display = 'none';
+      pageContent.classList.remove('blurred');
+    });
+
+    loginSubmit.addEventListener('click', () => {
+      window.location.href = '../pages/Home_Page.html';
+    });
+  </script>
+</body>
+</html>

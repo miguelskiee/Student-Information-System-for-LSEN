@@ -1,0 +1,224 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+
+  background: url('../assets/school_pics/sagadb.jpg') no-repeat center center fixed;
+  background-color: white ;
+  background-size: cover;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  margin: 0;
+}
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 30px;
+  background-color: #004080;
+  color: white;
+}
+
+.navbar-logo {
+  display: flex;
+  align-items: center;
+  font-size: 20px;
+  font-weight: bold;
+  gap: 15px;
+}
+
+.navbar-logo img {
+  height: 40px;
+}
+
+.navbar-links a {
+  color: white;
+  text-decoration: none;
+  margin-left: 20px;
+  font-weight: bold;
+  transition: 0.3s;
+}
+
+.navbar-links a:hover {
+  color: #ffcc00;
+}
+
+
+
+.form-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin-top: 250px;
+  margin-left: 300px;
+  margin-right: 300px;
+  text-align: center;
+  font-size: 25px;
+  font-weight: bold;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 2rem 2.5rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+
+}
+
+/* BLUR EFFECT */
+.blurred {
+  filter: blur(5px);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* LOGIN MODAL BACKGROUND */
+.login-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(3px);
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+/* LOGIN BOX */
+.login-box {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  width: 320px;
+  text-align: center;
+}
+
+.login-box h2 {
+  margin-bottom: 20px;
+  color: #004080;
+}
+
+.login-box input {
+  width: 90%;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.login-box button {
+  width: 95%;
+  padding: 10px;
+  background-color: #004080;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.login-box button:hover {
+  background-color: #003366;
+}
+
+.close-btn {
+  background-color: red;
+  margin-top: 10px;
+}
+
+/* ========== LANDING PAGE CONTENT (LOGO + IMAGE BOX) ========== */
+.landing-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 80px;
+  width: 90%;
+  max-width: 1200px;
+  margin: 100px auto; /* centers under navbar */
+}
+
+.logo-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.school-logo {
+  width: 300px;
+  height: 300px;
+  margin-top: 140px;
+  margin-right: 250px;
+}
+
+.image-section {
+  position: relative;
+  width: 600px;
+  height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.school-name {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 28px;
+  font-weight: bold;
+  color: #004080;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 8px 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Green rounded rectangle behind the photo */
+.background-box {
+  position: absolute;
+  right: -300px;
+  bottom: -250px;
+  width: 140%;
+  height: 140%;
+  background-color: #ffee05;
+  border-radius: 20px;
+  z-index: 0;
+}
+
+/* School image */
+.school-image {
+  position: relative;
+  margin-top: 100px;
+  width: 140%;
+  height: 140%;
+  right: -50px;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  z-index: 1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .landing-wrapper {
+    flex-direction: column;
+    gap: 40px;
+    text-align: center;
+  }
+
+  .image-section {
+    width: 90%;
+    height: auto;
+  }
+
+  .background-box {
+    width: 100%;
+    height: 70%;
+  }
+
+  .school-logo {
+    width: 180px;
+  }
+}

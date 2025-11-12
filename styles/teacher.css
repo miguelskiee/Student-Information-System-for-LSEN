@@ -1,0 +1,128 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f4;
+  /* padding: 40px; */
+  margin-top: 20px;
+}
+
+/* Navbar container */
+.teacher-navbar {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between; /* puts items on opposite ends */
+  align-items: center;            /* vertically centers items */
+  padding: 10px 30px;
+  background-color: #e9eef6;
+}
+
+/* Left side: Return button (icon + text) */
+.navbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  cursor: pointer;
+}
+
+.navbar-logo img {
+  width: 30px;
+  height: 30px;
+}
+
+.navbar-title {
+  font-size: 22px;
+  font-weight: bold;
+  color: #004080;
+}
+
+/* Right side: Search bar */
+.teacher-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.teacher-search input {
+  padding: 6px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+.teacher-search button {
+  background-color: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.teacher-search button:hover {
+  background-color: #0055aa;
+}
+
+/* Teacher list section */
+.teacher-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 40px;
+  justify-content: start;
+  margin-top: 50px;
+  margin-left: 70px;
+}
+
+/* Each teacher box */
+.teacher-box {
+  flex: 1 1 200px; /* flexible width, min 200px */
+  max-width: 250px;
+  aspect-ratio: 1 / 1; /* keeps them square */
+  border-radius: 15px;
+  background-color: #004080;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+    padding: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Image scales dynamically with box size */
+.teacher-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* fills box without distortion */
+  border-radius: 15px;
+}
+
+.teacher-box:hover {
+  cursor: pointer;
+  background-color: #e0e0e0;
+  transition: background-color 0.3s;
+}
+
+.add-teacher-box {
+  flex: 1 1 200px; /* flexible width, min 200px */
+  max-width: 250px;
+  aspect-ratio: 1 / 1; /* keeps them square */
+  border-radius: 15px;
+  /* background-color: #ffffff; */
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+    padding: 10px;
+    /* box-shadow: 0 2px 8px rgba(0,0,0,0.1); */
+}
+.add-teacher-box img{
+  width: 50%;
+  height: 50%;
+  object-fit: cover; /* fills box without distortion */
+  border-radius: 15px;
+}
+
+.add-teacher-box:hover {
+  cursor: pointer;
+  background-color: #e0e0e0;
+  transition: background-color 0.3s;
+}

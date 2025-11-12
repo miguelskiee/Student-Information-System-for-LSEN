@@ -1,0 +1,215 @@
+/* ========== GENERAL LAYOUT ========== */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  font-family: Arial, sans-serif;
+}
+
+.container {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ========== NAVBAR ========== */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 30px;
+  background-color: #004080;
+  color: white;
+  height: 60px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3000;
+}
+
+.navbar-links a {
+  color: white;
+  text-decoration: none;
+  margin-left: -10px;
+  font-weight: bold;
+  transition: 0.3s;
+}
+
+.navbar-links a:hover {
+  color: #ffcc00;
+}
+
+.navbar-links-container {
+  margin-top: 60px;
+  margin-left: 40px;
+  align-items: center;
+  height: 10px;
+  width: auto;
+  display: fleX;
+  gap: -50px;
+}
+
+.navbar-links img {
+  height: 25px;
+  margin-left: 10px;
+}
+
+.navbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.navbar-logo img {
+  height: 40px;
+}
+
+.navbar-title {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+/* ========== SIDEBAR ========== */
+.sidebar {
+  position: fixed;
+  top: 60px;
+  left: 0;
+  width: 300px;
+  height: calc(100vh - 60px);
+  background-color: #00264d;
+  padding-top: 50px;
+  opacity: 0.95;
+  z-index: 2000;
+}
+
+.username {
+  margin-top: 15px;
+  color: white;
+  text-align: center;
+  font-size: 25px;
+  font-weight: bold;
+  text-transform: uppercase;
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+.user-role {
+  margin-top: 10px;
+  color: white;
+  text-align: center;
+  font-size: 15px;
+  font-weight: bold;
+  text-transform: uppercase;
+  margin-bottom: 40px;
+  font-style: italic;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar a {
+  padding: 15px 25px;
+  text-decoration: none;
+  color: white;
+  font-weight: bold;
+  display: block;
+  font-size: 20px;
+  transition: background-color 0.3s;
+  
+}
+
+.sidebar a:hover {
+  background-color: #00509e;
+  transform: scale(0.95);
+  border-radius: 15px;
+
+}
+
+.sidebar a:focus {
+  transform: scale(1.02);
+  background-color: #00509e;
+  border-radius: 15px;
+  margin-left: 10px;
+  margin-right: 10px;
+  outline: none;
+}
+
+/* ========== SIDEBAR PROFILE IMAGE (CSS Hover Swap) ========== */
+.sidebar-logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 15px;
+  position: relative;
+}
+
+.profile-img {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 3px solid #ffffff;
+  background-image: url("../assets/icon_pics/mando_ando.jpg");
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s ease, background-image 0.5s ease-in-out;
+}
+
+/* Change image on hover */
+.profile-img:hover {
+  transform: scale(1.0);
+  background-image: url("../assets/icon_pics/neon.jpg");
+}
+
+.profile-img:active {
+  transform: scale(1.0);
+  background-image: url("../assets/icon_pics/emenem.jpg");
+}
+
+.sidebar a.active {
+  background-color: #00509e;
+  border-radius: 15px;
+}
+
+/* ========== IFRAME CONTENT ========== */
+#dashboard-frame {
+  position: fixed;
+  left: 300px;
+  top: 60px;
+  width: calc(100% - 300px);
+  height: calc(100vh - 60px);
+  border-radius: 15px;
+  border: none;
+  background-color: white;
+  z-index: 100;
+}
+
+/* image button for navbar sign out */
+.signout-btn {
+  display: inline-block;
+  padding: 4px;
+  margin-left: 8px;
+  border-radius: 6px;
+  background: transparent;
+  text-decoration: none;
+  vertical-align: middle;
+  transition: background-color .15s ease, transform .08s ease;
+}
+.signout-btn img {
+  display: block;
+  height: 25px;        /* adjust to match navbar */
+  width: 25px;         /* adjust to match navbar */
+  pointer-events: none; /* so clicks go to the anchor */
+}
+.signout-btn:hover {
+  background-color: rgba(255,255,255,0.06);
+  cursor: pointer;
+  transform: translateY(1px);
+}
+/* optional: hide text on very small screens */
+@media (max-width: 420px) {
+  .signout-text { display: none; }
+}
