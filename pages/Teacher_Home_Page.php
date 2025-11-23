@@ -1,3 +1,36 @@
+<?php
+// pages/Teacher_Home_Page.php
+// The main application shell for the Teacher role.
+
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
+if (file_exists('../model/db.php')) {
+    include '../model/db.php'; 
+} else {
+    die("Error: Database connection file '../model/db.php' not found.");
+}
+
+// --- SIMULATED LOGIN ---
+$userID = 1; // Assuming TeacherID 1 (Anna Soriano) is logged in.
+$stmt = $conn->prepare("SELECT FirstName, LastName, UserRole, IsSpecialEdCertified FROM Teachers WHERE TeacherID = ?");
+$stmt->execute([$userID]);
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$user) {
+    $user = ['FirstName' => 'Guest', 'LastName' => 'Teacher', 'UserRole' => 'TEACHER', 'IsSpecialEdCertified' => 0];
+}
+
+$username = htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']);
+$userRole = strtoupper(htmlspecialchars($user['UserRole'] ?? 'Teacher'));
+
+$navItems = [
+    'Dashboard'     => 'Teacher_Dashboard.php',
+    'Students'      => 'Teacher_Students.php',
+    'Classes'       => 'Teacher_Classes.php',
+    'Profile'       => 'Profile_Page.php', // Reuses the existing profile page
+];
+?>
   <!DOCTYPE html>
   <html lang="en">
   <head>
@@ -22,20 +55,14 @@
         <div class="sidebar-logo">  
           <div class="profile-img"></div>
         </div>
-        <div class="username">Admin</div>
-        <div class="user-role">ADMINISTRATOR</div>
+        <div class="username"><?php echo $username; ?></div>
+        <div class="user-role"><?php echo $userRole; ?></div>
 
-        <ul>
-  <ul>
-    <li><a href="#" onclick="loadPage('../pages/dashboard.php', event)">Dashboard</a></li>
-    <li><a href="#" onclick="loadPage('../pages/Profile_Page.php', event)">Profile</a></li>
-    <li><a href="#" onclick="loadPage('../pages/Teacher_Page.php', event)">Teachers</a></li>
-    <li><a href="#" onclick="loadPage('../pages/Students.php', event)">Students</a></li>
-    <li><a href="#" onclick="loadPage('../pages/Classes.php', event)">Classes</a></li>
-    <li><a href="#" onclick="loadPage('../pages/analytics_detail.php', event)">Report Tools</a></li>
-    <li><a href="#" onclick="loadPage('../pages/Settings.php', event)">Settings</a></li>
-  </ul>
-        </ul>
+      <ul>
+        <?php foreach ($navItems as $label => $file): ?>
+            <li><a href="#" onclick="loadPage('../pages/<?php echo $file; ?>', event)"><?php echo $label; ?></a></li>
+        <?php endforeach; ?>
+      </ul>
 
         <div class="navbar-links-container">
           <a href="../utils/index.html" class="signout-text">Sign Out</a>
@@ -46,7 +73,7 @@
       </aside>
 
       <!-- MAIN IFRAME -->
-      <iframe id="dashboard-frame" src="../pages/dashboard.php"></iframe>
+      <iframe id="dashboard-frame" src="../pages/Teacher_Dashboard.php"></iframe>
     </div>
 
     <!-- SCRIPT TO SWITCH IFRAME PAGES -->
