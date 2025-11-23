@@ -1,6 +1,6 @@
 <?php
 // pages/Classes.php
-include '../model/db.php'; 
+include '../model/db.php'; // Corrected path to model
 $subjects = $conn->query("SELECT * FROM Subjects ORDER BY GradeLevel, SubjectName")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
@@ -24,7 +24,7 @@ $subjects = $conn->query("SELECT * FROM Subjects ORDER BY GradeLevel, SubjectNam
 
   <div class="section-subjects">
     <h2>Subject List</h2>
-    <div class="controls"><button class="add-btn">➕ Add New Subject</button></div>
+    <div class="controls"><a href="subject_form.php" class="add-btn">➕ Add New Subject</a></div>
     <table class="data-table">
       <thead>
         <tr><th>Code</th><th>Name</th><th>Grade Level</th><th>Assignments</th><th>Actions</th></tr>
@@ -35,17 +35,19 @@ $subjects = $conn->query("SELECT * FROM Subjects ORDER BY GradeLevel, SubjectNam
             <td><?php echo htmlspecialchars($sub['Code']); ?></td>
             <td><?php echo htmlspecialchars($sub['SubjectName']); ?></td>
             <td><?php echo htmlspecialchars($sub['GradeLevel']); ?></td>
-            <td><a href="assignments.php?sub_id=<?php echo $sub['SubjectID']; ?>" style="color: #007bff;">View (Placeholder)</a></td>
-            <td><a href="#" style="color: #007bff;">Edit</a></td>
+            <td><a href="assignments.php?sub_id=<?php echo $sub['SubjectID']; ?>" style="color: #007bff;">View (12)</a></td>
+            <td>
+                <a href="subject_form.php?id=<?php echo $sub['SubjectID']; ?>" style="color: #28a745;">Edit</a>
+            </td>
           </tr>
         <?php endforeach; ?>
       </tbody>
     </table>
   </div>
 
-  <div class="section-assignments">
-    <h2>🤖 AI Grading Review Queue</h2>
-    <p>Submissions graded by AI with low confidence or a pending Teacher Override Score.</p>
+  <div class="section-assignments" style="margin-top: 30px;">
+    <h2>AI Grading Review Queue (For Teacher Override)</h2>
+    <p>Displays submissions graded by AI with low confidence or high plagiarism risk.</p>
     <table class="data-table">
       <thead>
         <tr><th>Submission ID</th><th>Assignment</th><th>Student</th><th>AI Score</th><th>Confidence</th><th>Actions</th></tr>
@@ -53,10 +55,10 @@ $subjects = $conn->query("SELECT * FROM Subjects ORDER BY GradeLevel, SubjectNam
       <tbody>
         <tr>
           <td>101</td>
-          <td>Essay Writing</td>
+          <td>Math Quiz 1</td>
           <td>Jacob Lopez</td>
-          <td style="color: #dc3545;">45/50</td>
-          <td>55% (Low)</td>
+          <td>72/100</td>
+          <td>55%</td>
           <td><a href="grading_tool.php?sub_id=101" style="color: #007bff; font-weight: bold;">Review & Override</a></td>
         </tr>
       </tbody>

@@ -1,18 +1,19 @@
 <?php
 // pages/Teacher_Classes.php
+// Corrected database inclusion path based on project structure
 include '../model/db.php'; 
 
 $teacherID = 1; // Simulated logged-in TeacherID
 
 // Fetch subjects and sections assigned to this teacher
-$assignments = $conn->prepare("
+$assignmentsStmt = $conn->prepare("
     SELECT ta.Section, s.SubjectName, s.SubjectID 
     FROM TeacherAssignments ta
     JOIN Subjects s ON ta.SubjectID = s.SubjectID
     WHERE ta.TeacherID = ?
 ");
-$assignments->execute([$teacherID]);
-$myClasses = $assignments->fetchAll(PDO::FETCH_ASSOC);
+$assignmentsStmt->execute([$teacherID]);
+$myClasses = $assignmentsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Count pending submissions needing review for visual feedback
 $pendingReviewCount = $conn->query("
@@ -60,14 +61,20 @@ $pendingReviewCount = $conn->query("
               <td><?php echo htmlspecialchars($class['SubjectName']); ?></td>
               <td><?php echo htmlspecialchars($class['Section']); ?></td>
               <td>
-                <a href="#" style="color: #28a745;">Enter Grades</a> | 
-                <a href="#" style="color: #ffc107;">Log Attendance</a>
+                <!-- Link to Attendance Logger -->
+                <a href="attendance_logger.php?subject_id=<?php echo $class['SubjectID']; ?>&section=<?php echo $class['Section']; ?>" 
+                   class="action-link" style="color: #ffc107; font-weight: 600;">Log Attendance</a> |
+                
+                <!-- Link to Grade Entry (placeholder: Grade Entry is per student, so we link to the full student list) -->
+                <a href="Teacher_Students.php" class="action-link" style="color: #28a745;">Enter Grades</a>
               </td>
             </tr>
           <?php endforeach; ?>
         </tbody>
       </table>
-      <button class="action-btn" style="margin-top: 20px; background-color: #28a745;">➕ Create New Assignment</button>
+      
+      <!-- Link to Assignment Creation Form -->
+      <a href="assignment_form.php" class="action-btn" style="margin-top: 20px; background-color: #28a745; text-decoration: none;">➕ Create New Assignment</a>
     </div>
 
     <!-- Right Panel: AI Grading -->
@@ -77,13 +84,14 @@ $pendingReviewCount = $conn->query("
       
       <?php if ($pendingReviewCount > 0): ?>
           <p class="warning">You have **<?php echo $pendingReviewCount; ?>** submissions needing review.</p>
-          <a href="grading_override.php" class="action-btn" style="background-color: #dc3545;">Go to Review Queue</a>
+          <!-- Link to the AI Grading Review Queue -->
+          <a href="grading_override.php" class="action-btn" style="background-color: #dc3545; text-decoration: none;">Go to Review Queue</a>
       <?php else: ?>
           <p style="color: #28a745; font-weight: bold;">✅ Queue is clear! All submissions processed.</p>
       <?php endif; ?>
       
       <h3 style="margin-top: 30px; font-size: 1rem; color: #343a40;">Quick Actions</h3>
-      <a href="#" class="action-btn" style="background-color: #007bff;">View All Submissions</a>
+      <a href="#" class="action-btn" style="background-color: #007bff; text-decoration: none;">View All Submissions</a>
     </div>
   </div>
 </body>
