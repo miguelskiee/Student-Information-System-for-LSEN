@@ -2,229 +2,243 @@ import pandas as pd
 import numpy as np
 import mysql.connector
 from sklearn.ensemble import RandomForestClassifier, IsolationForest
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, roc_auc_score
 from sklearn.preprocessing import StandardScaler
-from collections import defaultdict # Used for manual aggregation
-import json # Used for saving job details
+import sys
+
+# --- CONFIGURATION ---
+RISK_THRESHOLD = 0.5
+ATTENDANCE_THRESHOLD = 0.85
+GRADE_THRESHOLD = 75
+BEHAVIOR_POINTS_THRESHOLD = 10 # If sum of behavior points > 10, flag as risk
 
 # ============================================
-# 1. CONNECT TO DATABASE & DATA FETCH
+# KNOWLEDGE BASE: DISABILITY-SPECIFIC STRATEGIES
 # ============================================
-db = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="admin",
-    database="sagad_sis"
-    port=3307
-)
-cursor = db.cursor()
+STRATEGY_MAP = {
+    'ADHD': {
+        'Grades': ["Break tasks into micro-steps with checklists.", "Use gamified learning (Kahoot).", "Allow standing desks."],
+        'Attendance': ["Schedule soft starts (low pressure mornings).", "Morning classroom jobs."]
+    },
+    'ASD - General': { 
+        'Grades': ["Use visual schedules/graphic organizers.", "Incorporate special interests into lessons."],
+        'Attendance': ["Visual countdowns for transitions.", "Predictable morning routine."]
+    },
+    'ASD - L1': { # Level 1 (Requiring Support)
+        'Grades': ["Social scripts for group work.", "Noise-canceling headphones during testing."],
+        'Attendance': ["Peer buddy system for arrival."]
+    },
+    'ASD - L2': { # Level 2 (Substantial Support)
+        'Grades': ["Simplified instructions with pictures.", "One-step commands only.", "Reduced workload."],
+        'Attendance': ["Direct hand-off from parent to aide.", "Sensory-friendly entry route."]
+    },
+    'ASD - ID': { # ASD + Intellectual Disability
+        'Grades': ["Focus on functional life skills.", "Concrete objects for math (manipulatives).", "High repetition."],
+        'Attendance': ["Reward chart for daily attendance."]
+    },
+    'SLD': { # Specific Learning Disability
+        'Grades': ["Provide audiobooks/Text-to-Speech.", "No penalty for spelling errors.", "Extended time on tests."],
+        'Attendance': ["Check for anxiety regarding reading aloud."]
+    },
+    'V.I.': { # Visual Impairment
+        'Grades': ["Large print or Braille materials.", "High-contrast handouts.", "Seat in front row."],
+        'Attendance': ["Orientation and mobility support for hallways."]
+    },
+    'H.I.': { # Hearing Impairment
+        'Grades': ["Captions on all videos.", "Face student when speaking (lip reading).", "Visual cues for bells."],
+        'Attendance': ["Flashing light alerts for schedule changes."]
+    },
+    'Osteogenesis Imperfecta': { # Brittle Bone Disease
+        'Grades': ["Ergonomic seating is critical.", "Allow elevator use (no stairs).", "Extra time for writing (hand fatigue)."],
+        'Attendance': ["Plan for medical absences.", "Avoid crowded hallways during transitions."]
+    },
+    'CP': { # Cerebral Palsy
+        'Grades': ["Assistive technology (speech-to-text).", "Adaptive writing tools.", "Digital submission of homework."],
+        'Attendance': ["Accessible transport coordination.", "Allow late arrival to avoid crowds."]
+    },
+    'Seizure/Epilepsy': {
+        'Grades': ["Stop testing during aura/prodrome.", "Provide recovery time (naps) without penalty.", "Notes provided if class missed."],
+        'Attendance': ["Monitor for medication side-effects (drowsiness)."]
+    },
+    'Bipolar/Schizophrenia': {
+        'Grades': ["Flexible deadlines during episodes.", "Quiet space for grounding.", "Reduce homework during instability."],
+        'Attendance': ["Afternoon check-ins.", "Allow 'mental health days' without academic penalty."]
+    },
+    'General': { 
+        'Grades': ["Peer tutoring.", "Study guides provided early."],
+        'Attendance': ["Parent meetings.", "Transport checks."]
+    },
+    'Enrichment': { 
+        'General': ["Leadership roles.", "Advanced projects.", "Mentoring others."]
+    }
+}
 
-# Query pulls the core data needed from the latest term and historical data
-query = """
+# --- BEHAVIOR INTERVENTIONS (Applies to all) ---
+BEHAVIOR_INTERVENTIONS = {
+    'Aggression': ["Teach replacement behaviors.", "Identify antecedents.", "Safety first protocol."],
+    'Elopement': ["Seat away from doors.", "Visual Stop/Go signs.", "Request break cards."],
+    'Meltdown': ["Reduce sensory input.", "First-Then board.", "Quiet corner access."],
+    'Non-Compliance': ["Offer two choices.", "Neutral tone.", "Focus on start requests."],
+    'Social Withdrawal': ["Assign a buddy.", "Small group roles.", "Private praise."],
+    'Self-Injury': ["Block sensory triggers.", "Safe alternatives (stress ball).", "Counselor referral."]
+}
+
+# ============================================
+# 1. CONNECT & FETCH
+# ============================================
+try:
+    db = mysql.connector.connect(host="localhost", user="root", password="", database="sagad_sis")
+    cursor = db.cursor()
+except mysql.connector.Error as err:
+    print(f"Error: {err}")
+    sys.exit(1)
+
+# Get Term
+cursor.execute("SELECT DISTINCT Term FROM AcademicRecords ORDER BY Term DESC LIMIT 1")
+term_row = cursor.fetchone()
+if not term_row: sys.exit(0)
+CURRENT_TERM = term_row[0]
+
+# Previous Term Helper
+def get_prev_term(t):
+    try:
+        y, q = t.split('-Q')
+        return f"{int(y)-1}-Q4" if int(q)==1 else f"{y}-Q{int(q)-1}"
+    except: return None
+PREVIOUS_TERM = get_prev_term(CURRENT_TERM)
+
+print(f"--- AI ENGINE STARTED: {CURRENT_TERM} ---")
+
+# --- FETCH DATA ---
+# Negative points are high positive numbers in 'behavior_records' usually, 
+# but based on your PHP, Aggression=5. So High Sum = Bad.
+query = f"""
 SELECT 
-    s.StudentID,
-    s.Disability,
-    ar.Score,
-    ar.Term,
-    ar.AttendanceDays,
-    ar.TotalPossibleDays,
-    bd.AttentionSpanMinutes,
-    bd.ClassParticipation,
-    sph.Term AS HistoryTerm,
-    sph.Grade AS HistoricalGrade,
-    sph.AttendanceRate AS HistoryAttendanceRate,
-    sph.BehaviorScore AS HistoryBehaviorScore
+    s.StudentID, s.Disability, ar.Score, ar.AttendanceDays,
+    COALESCE(SUM(br.points), 0) as TotalBehaviorPoints,
+    (SELECT behavior_type FROM behavior_records br2 WHERE br2.student_id = s.StudentID AND br2.category = 'Negative' GROUP BY behavior_type ORDER BY COUNT(*) DESC LIMIT 1) as FreqIssue,
+    sph.Grade AS HistGrade
 FROM Students s
-LEFT JOIN AcademicRecords ar ON s.StudentID = ar.StudentID
-LEFT JOIN BehavioralData bd ON s.StudentID = bd.StudentID AND bd.DateObserved = (
-    SELECT MAX(DateObserved) FROM BehavioralData WHERE StudentID = s.StudentID
-)
-LEFT JOIN StudentPerformanceHistory sph ON s.StudentID = sph.StudentID AND sph.Term = '2023-Q4'
-WHERE ar.Term = '2024-Q1' -- Focus only on the latest term data for current scores
+LEFT JOIN AcademicRecords ar ON s.StudentID = ar.StudentID AND ar.Term = '{CURRENT_TERM}'
+LEFT JOIN behavior_records br ON s.StudentID = br.student_id 
+LEFT JOIN StudentPerformanceHistory sph ON s.StudentID = sph.StudentID AND sph.Term = '{PREVIOUS_TERM}'
+GROUP BY s.StudentID
 """
 cursor.execute(query)
 raw_data = cursor.fetchall()
 
-columns = [
-    "StudentID", "Disability", "Score", "Term", "AttendanceDays", "TotalPossibleDays",
-    "AttentionSpan", "Participation", "HistoryTerm", "HistoryGrade", 
-    "HistoryAttendance", "HistoryBehaviorScore"
-]
+if not raw_data: sys.exit(0)
 
-df_raw = pd.DataFrame(raw_data, columns=columns)
+cols = ["StudentID", "Disability", "Score", "Attendance", "BehPoints", "FreqIssue", "HGrade"]
+df = pd.DataFrame(raw_data, columns=cols)
 
 # ============================================
-# 2. FEATURE ENGINEERING & AGGREGATION (PANDAS FIX)
+# 2. PRE-PROCESSING
 # ============================================
+df['Score'] = df['Score'].fillna(0)
+df['Attendance'] = df['Attendance'].fillna(0)
+df['HGrade'] = pd.to_numeric(df['HGrade'], errors='coerce').fillna(df['Score'])
+df['AttRate'] = (df['Attendance'] / 60.0).clip(upper=1.0) # Assumes 60 days/term
 
-# Map Participation to a numerical score
-participation_map = {"Poor": 1, "Average": 2, "Good": 3, "Excellent": 4}
-df_raw["ParticipationScore"] = df_raw["Participation"].map(participation_map)
-
-# 2.1 Calculate Aggregated Academic Features for 2024-Q1
-agg_features = df_raw.groupby('StudentID').agg(
-    # GPA (Mean Score)
-    GPA_Current=('Score', 'mean'),
-    # Grade Volatility (Standard Deviation of Scores)
-    Grade_Volatility=('Score', 'std'),
-    # Subject Imbalance (Max Score - Min Score)
-    Subject_Imbalance=('Score', lambda x: x.max() - x.min()),
-    # Overall Attendance (using the last recorded attendance days)
-    Attendance_Rate_Current=('AttendanceDays', lambda x: x.iloc[0] / x.iloc[0] if x.iloc[0] > 0 else 0)
-).reset_index()
-
-# 2.2 Merge in Historical and Behavioral Features 
-df_final = df_raw.drop_duplicates(subset=['StudentID']).set_index('StudentID').join(
-    agg_features.set_index('StudentID'), how='left'
-)
-
-# 2.3 Calculate Grade Trend (Current GPA - Historical Grade)
-# *** FIX APPLIED HERE: Convert decimal.Decimal to float for arithmetic ***
-df_final["HistoryGrade"] = df_final["HistoryGrade"].astype(float)
-df_final["Grade_Trend"] = df_final["GPA_Current"] - df_final["HistoryGrade"]
-
-# 2.4 Final Feature Selection and Cleanup
-df_features = df_final[[
-    "GPA_Current", 
-    "Grade_Volatility", 
-    "Subject_Imbalance", 
-    "Attendance_Rate_Current",
-    "HistoryGrade", 
-    "HistoryAttendance", 
-    "HistoryBehaviorScore",
-    "ParticipationScore",
-    "AttentionSpan",
-    "Grade_Trend"
-]]
-
-# Replace NaNs with 0 after trend/volatility calculation (important for Isolation Forest)
-df_features = df_features.fillna(0)
-# Ensure infinite values (from 0 division in aggregation) are handled
-df_features.replace([np.inf, -np.inf], 0, inplace=True) 
-
-X = df_features.values
-X_ids = df_features.index.values # Keep IDs separate for later saving
-
-# ============================================
-# 3. RANDOM FOREST PREDICTION MODEL
-# ============================================
-
-# Target variable: "At-Risk" if current GPA < 75 (Rule-Based Labeling)
-df_final["RiskLabel"] = (df_final["GPA_Current"] < 75).astype(int)
-y = df_final["RiskLabel"]
-
-# 3.1 Scaling Features 
+# Model Features
+X = df[["Score", "AttRate", "HGrade", "BehPoints"]].fillna(0).values
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# 3.2 Stratified Split 
-# NOTE: Since this is run on the full dataset, the split/report is just for validation/testing
-X_train, X_test, y_train, y_test = train_test_split(
-    X_scaled, y, 
-    test_size=0.3, 
-    random_state=42,
-    stratify=y 
-)
+# ============================================
+# 3. AI ANALYSIS
+# ============================================
+rf = RandomForestClassifier(n_estimators=100, random_state=42)
+# Train model to predict if student is "At Risk" (Grades < 75 OR High Behavior Points)
+rf.fit(X_scaled, ((df["Score"] < GRADE_THRESHOLD) | (df["BehPoints"] > BEHAVIOR_POINTS_THRESHOLD)).astype(int))
+probs = rf.predict_proba(X_scaled)[:, 1]
 
-rf = RandomForestClassifier(n_estimators=200, random_state=42)
-rf.fit(X_train, y_train)
+iso = IsolationForest(contamination=0.1, random_state=42)
+anomalies = iso.fit_predict(X_scaled)
 
-y_pred = rf.predict(X_test)
-
-# Evaluation (Printed output for local testing/monitoring)
-print("=== RANDOM FOREST REPORT ===")
-print(classification_report(y_test, y_pred, zero_division=0))
-
-# Get predictions on the full scaled dataset
-df_final["PredictedRisk"] = rf.predict(X_scaled)
-df_final["RiskProbability"] = rf.predict_proba(X_scaled)[:, 1]
-
-# Feature Importance
-feature_importances = pd.Series(rf.feature_importances_, index=df_features.columns)
-print("\n=== TOP 5 FEATURE IMPORTANCE ===")
-print(feature_importances.sort_values(ascending=False).head(5))
+df["RiskProb"] = probs
+df["IsAnomaly"] = anomalies == -1
 
 # ============================================
-# 4. ISOLATION FOREST ANOMALY DETECTION
+# 4. GENERATE ALERTS & RECOMMENDATIONS
 # ============================================
+cursor.execute("TRUNCATE TABLE AI_PerformanceAlerts")
+cursor.execute("TRUNCATE TABLE AI_TeachingRecommendations")
 
-# Use the scaled data for anomaly detection
-iso = IsolationForest(contamination=0.1, random_state=42) 
-df_final["Anomaly"] = iso.fit_predict(X_scaled)
+alert_sql = """INSERT INTO AI_PerformanceAlerts (StudentID, RiskLevel, PredictedIssue, ModelVersion, DateGenerated, RiskProbability, AnomalyScore) VALUES (%s, %s, %s, 'RF-V2-DisabilityAware', NOW(), %s, 0)"""
+rec_sql = """INSERT INTO AI_TeachingRecommendations (StudentID, TeacherID, LearningNeed, RecommendedStrategy, Source, DateGenerated) VALUES (%s, 1, %s, %s, 'SmartEngine-V2', NOW())"""
 
-# Convert to readable format
-df_final["AnomalyFlag"] = df_final["Anomaly"].map({1: 0, -1: 1}) # 1 = anomaly/outlier
-df_final["AnomalyScore"] = iso.decision_function(X_scaled)
+count_alerts = 0
+count_recs = 0
 
-# ============================================
-# 5. SAVE RESULTS BACK TO DATABASE
-# ============================================
-
-# Clear previous alerts before inserting new ones
-cursor.execute("TRUNCATE TABLE AI_PerformanceAlerts") 
-db.commit()
-
-save_query = """
-INSERT INTO AI_PerformanceAlerts 
-(StudentID, RiskLevel, PredictedIssue, ModelVersion, DateGenerated, RiskProbability, AnomalyScore) 
-VALUES (%s, %s, %s, 'RF-iF-v1.1', NOW(), %s, %s)
-"""
-
-# Count alerts and anomalies for SystemJobs logging
-alerts_generated = 0
-anomalies_detected = 0
-
-for student_id in df_final.index:
-    row = df_final.loc[student_id]
-    risk_level = "High" if row["PredictedRisk"] == 1 else ("Medium" if row["RiskProbability"] > 0.6 else "Low")
-    predicted_issue = f"At Risk ({row['RiskProbability']:.2f})" if row["PredictedRisk"] == 1 else "Normal"
+for sid in df.index:
+    row = df.iloc[sid]
+    student_id = row['StudentID']
     
-    # Override issue if anomaly is detected
-    if row["AnomalyFlag"] == 1:
-        predicted_issue = f"Anomaly Detected (Score: {row['AnomalyScore']:.2f})"
-        risk_level = "High" # Anomalies are often high risk for follow-up
-        anomalies_detected += 1
+    # --- A. DIAGNOSE ISSUES ---
+    issues = []
+    if row['Score'] < GRADE_THRESHOLD: issues.append('Grades')
+    if row['AttRate'] < ATTENDANCE_THRESHOLD: issues.append('Attendance')
+    if row['BehPoints'] > BEHAVIOR_POINTS_THRESHOLD: issues.append('Behavior')
     
-    if row["PredictedRisk"] == 1:
-        alerts_generated += 1
+    is_risk = row["RiskProb"] >= RISK_THRESHOLD or row["IsAnomaly"]
+    
+    # --- B. SAVE ALERTS ---
+    if is_risk:
+        risk_lvl = "High" if row["RiskProb"] >= 0.7 else "Medium"
+        issue_txt = f"At Risk: {', '.join(issues)}" if issues else "At Risk: Prediction"
+        if row["IsAnomaly"] and not issues: issue_txt = "Monitor Performance (Anomaly Detected)"
+        cursor.execute(alert_sql, (int(student_id), risk_lvl, issue_txt, float(row["RiskProb"])))
+        count_alerts += 1
+    
+    # --- C. GENERATE STRATEGIES ---
+    d_raw = str(row['Disability']).upper()
+    d_key = 'General'
+
+    # STRICT MATCHING LOGIC
+    if 'ASD' in d_raw or 'AUTISM' in d_raw:
+        if 'ID' in d_raw: d_key = 'ASD - ID'
+        elif 'L2' in d_raw: d_key = 'ASD - L2'
+        elif 'L1' in d_raw: d_key = 'ASD - L1'
+        else: d_key = 'ASD - General'
+    elif 'ADHD' in d_raw: d_key = 'ADHD'
+    elif 'SLD' in d_raw or 'DYSLEXIA' in d_raw: d_key = 'SLD'
+    elif 'V.I.' in d_raw or 'VISUAL' in d_raw: d_key = 'V.I.'
+    elif 'H.I.' in d_raw or 'HEARING' in d_raw: d_key = 'H.I.'
+    elif 'OSTEOGENESIS' in d_raw or 'IMPERPECTA' in d_raw: d_key = 'Osteogenesis Imperfecta'
+    elif 'CP' in d_raw or 'CEREBRAL' in d_raw: d_key = 'CP'
+    elif 'BIPOLAR' in d_raw or 'SCHIZO' in d_raw or 'BI POLAR' in d_raw: d_key = 'Bipolar/Schizophrenia'
+    elif 'SEIZURE' in d_raw or 'EPILEPSY' in d_raw: d_key = 'Seizure/Epilepsy'
+
+    recs_to_add = []
+    
+    # 1. Behavior specific
+    freq_issue = row['FreqIssue']
+    if freq_issue and freq_issue in BEHAVIOR_INTERVENTIONS:
+         recs_to_add.append(f"<b>Beh: {freq_issue}</b>")
+         recs_to_add.extend(BEHAVIOR_INTERVENTIONS[freq_issue][:2])
+
+    # 2. Disability specific (Grades/Attendance)
+    if 'Grades' in issues:
+        strategies = STRATEGY_MAP.get(d_key, STRATEGY_MAP['General']).get('Grades', [])
+        recs_to_add.extend(strategies)
+    if 'Attendance' in issues:
+        strategies = STRATEGY_MAP.get(d_key, STRATEGY_MAP['General']).get('Attendance', [])
+        recs_to_add.extend(strategies)
+    
+    # 3. Enrichment
+    if not issues and not is_risk:
+        recs_to_add.extend(STRATEGY_MAP['Enrichment']['General'][:2])
+
+    # SAVE
+    if recs_to_add:
+        final_strategy_text = "• " + "\n• ".join(list(dict.fromkeys(recs_to_add)))
+        learning_need_txt = f"{d_key}"
+        if issues: learning_need_txt += f" ({', '.join(issues)})"
         
-    cursor.execute(save_query, (
-        int(student_id),
-        risk_level,
-        predicted_issue,
-        float(row["RiskProbability"]),
-        float(row["AnomalyScore"])
-    ))
+        cursor.execute(rec_sql, (int(student_id), learning_need_txt, final_strategy_text))
+        count_recs += 1
 
 db.commit()
-print("\nResults successfully saved to AI_PerformanceAlerts table.")
-
-# ============================================
-# 6. UPDATE SYSTEM JOB STATUS (NEW FOR PHP CONCURRENCY)
-# ============================================
-
-job_details = {
-    'alerts_generated': alerts_generated,
-    'anomalies_detected': anomalies_detected,
-    'total_students_processed': len(df_final)
-}
-
-# Insert a record indicating the successful completion of the job
-job_query = """
-INSERT INTO SystemJobs 
-(JobName, JobType, Status, StartedAt, CompletedAt, Details) 
-VALUES (%s, %s, %s, NOW(), NOW(), %s)
-"""
-
-cursor.execute(job_query, (
-    'ML_Inference', 
-    'Inference', 
-    'Completed', 
-    json.dumps(job_details) # Store job_details as JSON string
-))
-
-db.commit()
-print("SystemJobs status updated.")
+print(f"Done. Saved {count_alerts} alerts and {count_recs} recommendations.")
 cursor.close()
 db.close()

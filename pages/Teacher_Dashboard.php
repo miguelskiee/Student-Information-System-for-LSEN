@@ -1,14 +1,19 @@
 <?php
 // pages/Teacher_Dashboard.php
+session_start();
 include '../model/db.php'; 
 
-$teacherID = 1; // Simulated logged-in TeacherID
+// 1. SECURITY & USER CHECK
+if (!isset($_SESSION['user_id'])) { die("Access Denied. Please log in."); }
+$teacherID = $_SESSION['user_id'];
+
+// Get User Name for Welcome Message
 $user = $conn->query("SELECT FirstName FROM Teachers WHERE TeacherID = $teacherID")->fetch(PDO::FETCH_ASSOC);
 
 // ============================================
 // AI MODEL EXECUTION LOGIC 
 // ============================================
-$python_script_path = '../model/model.py'; // Path confirmed from file structure
+$python_script_path = '../model/model.py'; 
 $min_run_interval_seconds = 60; 
 
 try {
@@ -26,32 +31,36 @@ try {
     $time_since_last_run = $current_time - $last_run_time;
 
     if ($time_since_last_run >= $min_run_interval_seconds) {
-        // Run the Python script asynchronously in the background
         $command = "python3 " . escapeshellarg($python_script_path) . " > /dev/null 2>&1 &";
         exec($command);
-        error_log("ML script triggered for Teacher Dashboard (Time since last run: {$time_since_last_run}s)");
     } 
 } catch (PDOException $e) {
     error_log("ML SystemJobs check failed: " . $e->getMessage());
 }
 
+// ============================================
+// DASHBOARD DATA FETCHING
+// ============================================
 
-// 1. FETCH COUNTS & ASSIGNMENTS (Original Logic)
-$studentCount = $conn->query("SELECT COUNT(DISTINCT ar.StudentID) FROM AcademicRecords ar WHERE ar.TeacherID = $teacherID")->fetchColumn();
+// 2. FETCH COUNTS (Linked via Section)
+$studentCount = $conn->query("
+    SELECT COUNT(DISTINCT s.StudentID) FROM Students s
+    JOIN TeacherAssignments ta ON s.Section = ta.Section
+    WHERE ta.TeacherID = $teacherID
+")->fetchColumn();
+
 $subjectCount = $conn->query("SELECT COUNT(*) FROM TeacherAssignments WHERE TeacherID = $teacherID")->fetchColumn();
 
-// Count High-Risk alerts related to this teacher's students
 $alertsCount = $conn->query("
-    SELECT COUNT(DISTINCT apa.StudentID) 
-    FROM AI_PerformanceAlerts apa
-    JOIN AcademicRecords ar ON apa.StudentID = ar.StudentID 
-    WHERE ar.TeacherID = $teacherID AND apa.RiskLevel = 'High'")->fetchColumn();
+    SELECT COUNT(DISTINCT apa.StudentID) FROM AI_PerformanceAlerts apa
+    JOIN Students s ON apa.StudentID = s.StudentID
+    JOIN TeacherAssignments ta ON s.Section = ta.Section
+    WHERE ta.TeacherID = $teacherID AND apa.RiskLevel = 'High'
+")->fetchColumn();
 
-
-// 2. FETCH GRADING QUEUE (AI-Assisted Grading & Feedback) - Original Logic
+// 3. FETCH GRADING QUEUE
 $queueQuery = "
-    SELECT 
-        s.SubmissionID, ass.Title, stud.FirstName, stud.LastName, aigr.SuggestedScore, aigr.ConfidenceLevel
+    SELECT s.SubmissionID, ass.Title, stud.FirstName, stud.LastName, aigr.SuggestedScore, aigr.ConfidenceLevel
     FROM StudentSubmissions s
     JOIN Assignments ass ON s.AssignmentID = ass.AssignmentID
     JOIN AI_GradingResults aigr ON s.SubmissionID = aigr.SubmissionID
@@ -60,31 +69,27 @@ $queueQuery = "
     LIMIT 3";
 $gradingQueue = $conn->query($queueQuery)->fetchAll(PDO::FETCH_ASSOC);
 
-// 3. FETCH STUDENT ALERTS (Progress & Performance Prediction) - Original Logic
+// 4. FETCH STUDENT ALERTS (Linked via Section)
 $alertsQuery = "
-    SELECT 
-        s.StudentID, s.FirstName, s.LastName, a.RiskLevel, a.PredictedIssue
+    SELECT s.StudentID, s.FirstName, s.LastName, a.RiskLevel, a.PredictedIssue
     FROM AI_PerformanceAlerts a
-    JOIN AcademicRecords ar ON a.StudentID = ar.StudentID
     JOIN Students s ON a.StudentID = s.StudentID
-    WHERE ar.TeacherID = $teacherID AND a.RiskLevel IN ('High', 'Medium')
-    GROUP BY s.StudentID -- Distinct alerts per student
-    LIMIT 5";
+    JOIN TeacherAssignments ta ON s.Section = ta.Section
+    WHERE ta.TeacherID = $teacherID AND a.RiskLevel IN ('High', 'Medium')
+    GROUP BY s.StudentID LIMIT 5";
 $studentAlerts = $conn->query($alertsQuery)->fetchAll(PDO::FETCH_ASSOC);
 
-
-// 4. FETCH AI TEACHING RECOMMENDATIONS (NEW LOGIC)
+// 5. FETCH TEACHING RECOMMENDATIONS (MISSING PART FIXED HERE)
+// Updated to link via TeacherAssignments (Section) instead of Gradebook
 $recsQuery = "
     SELECT 
         s.StudentID, s.FirstName, s.LastName, atr.RecommendedStrategy, s.Disability 
     FROM AI_TeachingRecommendations atr
     JOIN Students s ON atr.StudentID = s.StudentID
-    JOIN AcademicRecords ar ON s.StudentID = ar.StudentID
-    WHERE ar.TeacherID = $teacherID
-    GROUP BY atr.StudentID, atr.RecommendedStrategy 
+    JOIN TeacherAssignments ta ON s.Section = ta.Section
+    WHERE ta.TeacherID = $teacherID
     LIMIT 5";
 $teachingRecs = $conn->query($recsQuery)->fetchAll(PDO::FETCH_ASSOC);
-
 ?>
 
 <!DOCTYPE html>
@@ -172,47 +177,33 @@ $teachingRecs = $conn->query($recsQuery)->fetchAll(PDO::FETCH_ASSOC);
 
 <div class="panel">
     <h2 style="color: #28a745; border-bottom-color: #28a745;">💡 Smart Lesson Recommendations</h2>
-    <p style="color: #6c757d;">Suggested strategies for your highest-risk students.</p>
-    <ul style="list-style: disc; padding-left: 20px; margin-top: 15px; color: #343a40;">
-        <?php if ($teachingRecs): ?>
+    <p style="color: #6c757d; margin-bottom: 15px;">Suggested strategies for your highest-risk students.</p>
+    
+    <?php if ($teachingRecs): ?>
+        <div style="display: flex; flex-direction: column; gap: 15px;">
             <?php foreach ($teachingRecs as $rec): ?>
-                <li>
-                    **<?php echo htmlspecialchars($rec['FirstName'] . ' ' . $rec['LastName']); ?>** (<?php echo htmlspecialchars($rec['Disability'] ?: 'General'); ?>): 
-                    <?php echo htmlspecialchars($rec['RecommendedStrategy']); ?>
-                </li>
+                <div style="background-color: #f8f9fa; border-left: 4px solid #28a745; padding: 12px; border-radius: 4px;">
+                    <div style="font-weight: bold; color: #343a40; margin-bottom: 5px; font-size: 1.05rem;">
+                        <?php echo htmlspecialchars($rec['FirstName'] . ' ' . $rec['LastName']); ?>
+                        <span style="font-size: 0.85rem; color: #6c757d; font-weight: normal;">
+                            (<?php echo htmlspecialchars($rec['Disability'] ?: 'General'); ?>)
+                        </span>
+                    </div>
+                    
+                    <div style="font-size: 0.95rem; color: #495057; padding-left: 5px; line-height: 1.5;">
+                        <?php 
+                        // nl2br converts the Python \n to HTML <br> tags so bullets stack vertically
+                        echo nl2br(htmlspecialchars($rec['RecommendedStrategy'])); 
+                        ?>
+                    </div>
+                </div>
             <?php endforeach; ?>
-        <?php else: ?>
-            <li>No recent AI recommendations for your students.</li>
-        <?php endif; ?>
-    </ul>
+        </div>
+    <?php else: ?>
+        <p style="color: #6c757d; font-style: italic;">No recent AI recommendations for your students.</p>
+    <?php endif; ?>
 </div>
 
-    <!-- Right Panel: Grading Queue -->
-    <div>
-      <div class="panel">
-        <h2 style="color: #ffc107; border-bottom-color: #ffc107;">🤖 AI Grading Review Queue</h2>
-        <p style="color: #6c757d;">Submissions where AI confidence is low or override is needed.</p>
-        <table class="data-table" style="margin-top: 10px;">
-            <thead>
-                <tr><th>Submission</th><th>Student</th><th>Score</th><th>Action</th></tr>
-            </thead>
-            <tbody>
-                <?php if ($gradingQueue): ?>
-                    <?php foreach ($gradingQueue as $item): ?>
-                    <tr>
-                        <td><?php echo htmlspecialchars($item['Title']); ?></td>
-                        <td><?php echo htmlspecialchars($item['FirstName'] . ' ' . $item['LastName']); ?></td>
-                        <td style="color: #dc3545;"><?php echo round($item['SuggestedScore'], 0); ?> (<?php echo round($item['ConfidenceLevel']*100); ?>%)</td>
-                        <td><a href="grading_override.php?id=<?php echo $item['SubmissionID']; ?>">Review</a></td>
-                    </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr><td colspan="4">No submissions requiring manual review.</td></tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+</div>
 </body>
 </html>

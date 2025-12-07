@@ -133,24 +133,35 @@ function getRiskBadge($risk, $is_large = false) {
             <p style="white-space: pre-wrap; font-size: 0.9rem; color: #6c757d;"><?php echo htmlspecialchars($student['Notes'] ?? 'No notes recorded.'); ?></p>
         </div>
 
-        <div class="panel">
+<div class="panel">
             <h2>🧠 AI Teaching Recommendations</h2>
             <p style="color: #6c757d; margin-bottom: 10px;">Strategies tailored to the student's disability and risk status.</p>
+            
             <?php if ($recommendations): ?>
             <ul class="recs-list">
                 <?php foreach ($recommendations as $rec): ?>
-                    <li>
-                        <span style="font-weight: 600; color: #007bff;">[<?php echo htmlspecialchars($rec['Source']); ?>]:</span> 
-                        <?php echo htmlspecialchars($rec['RecommendedStrategy']); ?> 
-                        <small style="float: right; color: #adb5bd;"><?php echo date('M d, Y', strtotime($rec['DateGenerated'])); ?></small>
+                    <li style="padding: 15px 0; border-bottom: 1px solid #eee;">
+                        <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 600; color: #007bff; font-size: 0.9rem;">
+                                [<?php echo htmlspecialchars($rec['Source']); ?>]
+                            </span>
+                            <small style="color: #adb5bd;">
+                                <?php echo date('M d, Y', strtotime($rec['DateGenerated'])); ?>
+                            </small>
+                        </div>
+                        
+                        <div style="color: #495057; line-height: 1.6; padding-left: 5px; font-size: 0.95rem;">
+                            <?php echo nl2br(htmlspecialchars($rec['RecommendedStrategy'])); ?>
+                        </div>
                     </li>
                 <?php endforeach; ?>
             </ul>
             <?php else: ?>
-                <p style="color: #6c757d;">No specific teaching recommendations generated yet. (Run ML script)</p>
+                <p style="color: #6c757d; font-style: italic; padding: 10px 0;">
+                    No specific teaching recommendations generated yet. (Run ML script)
+                </p>
             <?php endif; ?>
         </div>
-    </div>
     
     <!-- RIGHT COLUMN: AI STATUS, HISTORY, LOGS -->
     <div>
@@ -165,9 +176,6 @@ function getRiskBadge($risk, $is_large = false) {
                 <span style="font-size: 1rem;"><?php echo htmlspecialchars($student['PredictedIssue'] ?? 'Normal'); ?></span>
             </div>
             <div class="data-row" style="font-size: 0.9rem; color: #6c757d;">
-                <strong style="width: 80px;">Confidence:</strong> 
-                <?php echo round(($student['RiskProbability'] ?? 0) * 100); ?>\% (RF) /
-                <?php echo round($student['AnomalyScore'] ?? 0, 3); ?> (iForest)
             </div>
         </div>
 

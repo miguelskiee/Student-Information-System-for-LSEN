@@ -1,37 +1,24 @@
 <?php
 // pages/Profile_Page.php (REVISED WITH ERROR HANDLING)
+session_start();
 include '../model/db.php'; 
 
-// --- User Simulation ---
-$adminID = 5; // Simulating the logged-in Admin's ID (expected to be the new user)
+if (!isset($_SESSION['user_id'])) { die("Access Denied."); }
+$currentUserID = $_SESSION['user_id']; // Replaces fixed $adminID
 
-// --- Database Query ---
-// Initialize $profile to an empty array for safety
 $profile = []; 
 try {
     $stmt = $conn->prepare("SELECT * FROM Teachers WHERE TeacherID = ?");
-    $stmt->execute([$adminID]);
+    $stmt->execute([$currentUserID]);
     $profile = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    // Log the error but continue to display a non-breaking page
     error_log("Profile Query Failed: " . $e->getMessage());
 }
 
-// --- Variable Fallbacks ---
-// If the user was not found ($profile is false or empty), set safe defaults
 if (!$profile) {
-    $profile = [
-        'FirstName' => 'User Not Found',
-        'LastName' => '',
-        'Email' => 'N/A',
-        'Phone' => 'N/A',
-        'UserRole' => 'UNKNOWN',
-        'Specializations' => 'N/A',
-        'Certifications' => 'N/A',
-        'IsSpecialEdCertified' => 0
-    ];
+    echo "Profile not found.";
+    exit;
 }
-
 // Get the user role safely
 $userRole = $profile['UserRole'] ?? 'UNKNOWN';
 

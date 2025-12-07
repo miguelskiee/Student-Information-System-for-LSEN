@@ -1,11 +1,11 @@
 <?php
-// pages/Teacher_Classes.php
-// Corrected database inclusion path based on project structure
+session_start();
 include '../model/db.php'; 
 
-$teacherID = 1; // Simulated logged-in TeacherID
+if (!isset($_SESSION['user_id'])) { die("Access Denied."); }
+$teacherID = $_SESSION['user_id'];
 
-// Fetch subjects and sections assigned to this teacher
+// Fetch assignments for THIS teacher
 $assignmentsStmt = $conn->prepare("
     SELECT ta.Section, s.SubjectName, s.SubjectID 
     FROM TeacherAssignments ta
@@ -15,14 +15,7 @@ $assignmentsStmt = $conn->prepare("
 $assignmentsStmt->execute([$teacherID]);
 $myClasses = $assignmentsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Count pending submissions needing review for visual feedback
-$pendingReviewCount = $conn->query("
-    SELECT COUNT(s.SubmissionID) 
-    FROM StudentSubmissions s
-    JOIN Assignments a ON s.AssignmentID = a.AssignmentID
-    JOIN AI_GradingResults aigr ON s.SubmissionID = aigr.SubmissionID
-    WHERE a.TeacherID = $teacherID AND aigr.ConfidenceLevel < 0.80
-")->fetchColumn();
+// REMOVED: Pending review count query
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -32,23 +25,22 @@ $pendingReviewCount = $conn->query("
   <style>
     body { background-color: #f4f7f9; color: #333; padding: 20px; }
     .header h1 { color: #007bff; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; margin-bottom: 25px; }
-    .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    /* Changed grid to single column since right panel is removed */
+    .panel-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
     .panel { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); }
     h2 { color: #343a40; margin-bottom: 15px; border-left: 5px solid #28a745; padding-left: 10px; }
     .data-table { width: 100%; border-collapse: collapse; }
     .data-table th, .data-table td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; }
     .data-table th { background-color: #f8f9fa; color: #495057; }
-    .action-btn { background-color: #007bff; color: white; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px; }
-    .warning { color: #dc3545; font-weight: bold; }
+    .action-link { text-decoration: none; margin: 0 5px; }
   </style>
 </head>
 <body>
-  <div class="header"><h1>📝 My Classes & Gradebook</h1></div>
+  <div class="header"><h1>📝 My Classes</h1></div>
 
   <div class="panel-grid">
-    <!-- Left Panel: My Classes & Data Entry -->
     <div class="panel">
-      <h2>My Current Assignments</h2>
+      <h2>My Classes</h2>
       <p style="color: #6c757d; margin-bottom: 15px;">Sections where you are the primary instructor.</p>
       
       <table class="data-table">
@@ -61,38 +53,17 @@ $pendingReviewCount = $conn->query("
               <td><?php echo htmlspecialchars($class['SubjectName']); ?></td>
               <td><?php echo htmlspecialchars($class['Section']); ?></td>
               <td>
-                <!-- Link to Attendance Logger -->
                 <a href="attendance_logger.php?subject_id=<?php echo $class['SubjectID']; ?>&section=<?php echo $class['Section']; ?>" 
                    class="action-link" style="color: #ffc107; font-weight: 600;">Log Attendance</a> |
                 
-                <!-- Link to Grade Entry (placeholder: Grade Entry is per student, so we link to the full student list) -->
                 <a href="Teacher_Students.php" class="action-link" style="color: #28a745;">Enter Grades</a>
               </td>
             </tr>
           <?php endforeach; ?>
         </tbody>
       </table>
-      
-      <!-- Link to Assignment Creation Form -->
-      <a href="assignment_form.php" class="action-btn" style="margin-top: 20px; background-color: #28a745; text-decoration: none;">➕ Create New Assignment</a>
     </div>
-
-    <!-- Right Panel: AI Grading -->
-    <div class="panel">
-      <h2 style="border-left-color: #ffc107;">🤖 AI Grading Review (<?php echo $pendingReviewCount; ?> Pending)</h2>
-      <p style="color: #6c757d; margin-bottom: 15px;">Submissions requiring manual inspection or score override.</p>
-      
-      <?php if ($pendingReviewCount > 0): ?>
-          <p class="warning">You have **<?php echo $pendingReviewCount; ?>** submissions needing review.</p>
-          <!-- Link to the AI Grading Review Queue -->
-          <a href="grading_override.php" class="action-btn" style="background-color: #dc3545; text-decoration: none;">Go to Review Queue</a>
-      <?php else: ?>
-          <p style="color: #28a745; font-weight: bold;">✅ Queue is clear! All submissions processed.</p>
-      <?php endif; ?>
-      
-      <h3 style="margin-top: 30px; font-size: 1rem; color: #343a40;">Quick Actions</h3>
-      <a href="#" class="action-btn" style="background-color: #007bff; text-decoration: none;">View All Submissions</a>
+    
     </div>
-  </div>
 </body>
 </html>
