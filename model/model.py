@@ -6,17 +6,17 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from collections import defaultdict # Used for manual aggregation
+import json # Used for saving job details
 
 # ============================================
 # 1. CONNECT TO DATABASE & DATA FETCH
-#    NOTE: The SQL query is expanded to pull all necessary raw data points
-#          for feature engineering in Pandas, fixing the initial join issue.
 # ============================================
 db = mysql.connector.connect(
     host="localhost",
     user="root",
-    password="",
+    password="admin",
     database="sagad_sis"
+    port=3307
 )
 cursor = db.cursor()
 
@@ -56,7 +56,6 @@ df_raw = pd.DataFrame(raw_data, columns=columns)
 
 # ============================================
 # 2. FEATURE ENGINEERING & AGGREGATION (PANDAS FIX)
-#    This section transforms the multi-row per student data into one feature vector per student.
 # ============================================
 
 # Map Participation to a numerical score
@@ -75,12 +74,14 @@ agg_features = df_raw.groupby('StudentID').agg(
     Attendance_Rate_Current=('AttendanceDays', lambda x: x.iloc[0] / x.iloc[0] if x.iloc[0] > 0 else 0)
 ).reset_index()
 
-# 2.2 Merge in Historical and Behavioral Features (taking the first non-null value for features that are constant per student/term)
+# 2.2 Merge in Historical and Behavioral Features 
 df_final = df_raw.drop_duplicates(subset=['StudentID']).set_index('StudentID').join(
     agg_features.set_index('StudentID'), how='left'
 )
 
 # 2.3 Calculate Grade Trend (Current GPA - Historical Grade)
+# *** FIX APPLIED HERE: Convert decimal.Decimal to float for arithmetic ***
+df_final["HistoryGrade"] = df_final["HistoryGrade"].astype(float)
 df_final["Grade_Trend"] = df_final["GPA_Current"] - df_final["HistoryGrade"]
 
 # 2.4 Final Feature Selection and Cleanup
@@ -113,11 +114,12 @@ X_ids = df_features.index.values # Keep IDs separate for later saving
 df_final["RiskLabel"] = (df_final["GPA_Current"] < 75).astype(int)
 y = df_final["RiskLabel"]
 
-# 3.1 Scaling Features (NEW: Improves model convergence)
+# 3.1 Scaling Features 
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# 3.2 Stratified Split (NEW: Handles class imbalance)
+# 3.2 Stratified Split 
+# NOTE: Since this is run on the full dataset, the split/report is just for validation/testing
 X_train, X_test, y_train, y_test = train_test_split(
     X_scaled, y, 
     test_size=0.3, 
@@ -130,15 +132,15 @@ rf.fit(X_train, y_train)
 
 y_pred = rf.predict(X_test)
 
-# Evaluation
+# Evaluation (Printed output for local testing/monitoring)
 print("=== RANDOM FOREST REPORT ===")
-print(classification_report(y_test, y_pred))
+print(classification_report(y_test, y_pred, zero_division=0))
 
 # Get predictions on the full scaled dataset
 df_final["PredictedRisk"] = rf.predict(X_scaled)
 df_final["RiskProbability"] = rf.predict_proba(X_scaled)[:, 1]
 
-# Feature Importance (NEW: For explainability)
+# Feature Importance
 feature_importances = pd.Series(rf.feature_importances_, index=df_features.columns)
 print("\n=== TOP 5 FEATURE IMPORTANCE ===")
 print(feature_importances.sort_values(ascending=False).head(5))
@@ -169,6 +171,10 @@ INSERT INTO AI_PerformanceAlerts
 VALUES (%s, %s, %s, 'RF-iF-v1.1', NOW(), %s, %s)
 """
 
+# Count alerts and anomalies for SystemJobs logging
+alerts_generated = 0
+anomalies_detected = 0
+
 for student_id in df_final.index:
     row = df_final.loc[student_id]
     risk_level = "High" if row["PredictedRisk"] == 1 else ("Medium" if row["RiskProbability"] > 0.6 else "Low")
@@ -178,6 +184,10 @@ for student_id in df_final.index:
     if row["AnomalyFlag"] == 1:
         predicted_issue = f"Anomaly Detected (Score: {row['AnomalyScore']:.2f})"
         risk_level = "High" # Anomalies are often high risk for follow-up
+        anomalies_detected += 1
+    
+    if row["PredictedRisk"] == 1:
+        alerts_generated += 1
         
     cursor.execute(save_query, (
         int(student_id),
@@ -189,5 +199,32 @@ for student_id in df_final.index:
 
 db.commit()
 print("\nResults successfully saved to AI_PerformanceAlerts table.")
+
+# ============================================
+# 6. UPDATE SYSTEM JOB STATUS (NEW FOR PHP CONCURRENCY)
+# ============================================
+
+job_details = {
+    'alerts_generated': alerts_generated,
+    'anomalies_detected': anomalies_detected,
+    'total_students_processed': len(df_final)
+}
+
+# Insert a record indicating the successful completion of the job
+job_query = """
+INSERT INTO SystemJobs 
+(JobName, JobType, Status, StartedAt, CompletedAt, Details) 
+VALUES (%s, %s, %s, NOW(), NOW(), %s)
+"""
+
+cursor.execute(job_query, (
+    'ML_Inference', 
+    'Inference', 
+    'Completed', 
+    json.dumps(job_details) # Store job_details as JSON string
+))
+
+db.commit()
+print("SystemJobs status updated.")
 cursor.close()
 db.close()

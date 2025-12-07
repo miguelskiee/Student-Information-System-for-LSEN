@@ -3,14 +3,52 @@
 include '../model/db.php'; 
 
 $teacherID = 1; // Simulated logged-in TeacherID
+$user = $conn->query("SELECT FirstName FROM Teachers WHERE TeacherID = $teacherID")->fetch(PDO::FETCH_ASSOC);
 
-// 1. FETCH COUNTS & ASSIGNMENTS
-$studentCount = $conn->query("SELECT COUNT(DISTINCT StudentID) FROM AcademicRecords WHERE TeacherID = $teacherID")->fetchColumn();
+// ============================================
+// AI MODEL EXECUTION LOGIC 
+// ============================================
+$python_script_path = '../model/model.py'; // Path confirmed from file structure
+$min_run_interval_seconds = 60; 
+
+try {
+    $stmt = $conn->prepare("
+        SELECT UNIX_TIMESTAMP(CompletedAt) AS LastRunTime 
+        FROM SystemJobs 
+        WHERE JobName = 'ML_Inference' AND Status = 'Completed' 
+        ORDER BY CompletedAt DESC 
+        LIMIT 1
+    ");
+    $stmt->execute();
+    $last_run_time = $stmt->fetchColumn();
+    $last_run_time = $last_run_time ?: 0; 
+    $current_time = time();
+    $time_since_last_run = $current_time - $last_run_time;
+
+    if ($time_since_last_run >= $min_run_interval_seconds) {
+        // Run the Python script asynchronously in the background
+        $command = "python3 " . escapeshellarg($python_script_path) . " > /dev/null 2>&1 &";
+        exec($command);
+        error_log("ML script triggered for Teacher Dashboard (Time since last run: {$time_since_last_run}s)");
+    } 
+} catch (PDOException $e) {
+    error_log("ML SystemJobs check failed: " . $e->getMessage());
+}
+
+
+// 1. FETCH COUNTS & ASSIGNMENTS (Original Logic)
+$studentCount = $conn->query("SELECT COUNT(DISTINCT ar.StudentID) FROM AcademicRecords ar WHERE ar.TeacherID = $teacherID")->fetchColumn();
 $subjectCount = $conn->query("SELECT COUNT(*) FROM TeacherAssignments WHERE TeacherID = $teacherID")->fetchColumn();
-$alertsCount = $conn->query("SELECT COUNT(*) FROM AI_PerformanceAlerts apa JOIN AcademicRecords ar ON apa.StudentID = ar.StudentID WHERE ar.TeacherID = $teacherID AND apa.RiskLevel = 'High'")->fetchColumn();
 
-// 2. FETCH GRADING QUEUE (AI-Assisted Grading & Feedback)
-// Find submissions related to this teacher's assignments that need review/override
+// Count High-Risk alerts related to this teacher's students
+$alertsCount = $conn->query("
+    SELECT COUNT(DISTINCT apa.StudentID) 
+    FROM AI_PerformanceAlerts apa
+    JOIN AcademicRecords ar ON apa.StudentID = ar.StudentID 
+    WHERE ar.TeacherID = $teacherID AND apa.RiskLevel = 'High'")->fetchColumn();
+
+
+// 2. FETCH GRADING QUEUE (AI-Assisted Grading & Feedback) - Original Logic
 $queueQuery = "
     SELECT 
         s.SubmissionID, ass.Title, stud.FirstName, stud.LastName, aigr.SuggestedScore, aigr.ConfidenceLevel
@@ -22,7 +60,7 @@ $queueQuery = "
     LIMIT 3";
 $gradingQueue = $conn->query($queueQuery)->fetchAll(PDO::FETCH_ASSOC);
 
-// 3. FETCH STUDENT ALERTS (Progress & Performance Prediction)
+// 3. FETCH STUDENT ALERTS (Progress & Performance Prediction) - Original Logic
 $alertsQuery = "
     SELECT 
         s.StudentID, s.FirstName, s.LastName, a.RiskLevel, a.PredictedIssue
@@ -33,6 +71,20 @@ $alertsQuery = "
     GROUP BY s.StudentID -- Distinct alerts per student
     LIMIT 5";
 $studentAlerts = $conn->query($alertsQuery)->fetchAll(PDO::FETCH_ASSOC);
+
+
+// 4. FETCH AI TEACHING RECOMMENDATIONS (NEW LOGIC)
+$recsQuery = "
+    SELECT 
+        s.StudentID, s.FirstName, s.LastName, atr.RecommendedStrategy, s.Disability 
+    FROM AI_TeachingRecommendations atr
+    JOIN Students s ON atr.StudentID = s.StudentID
+    JOIN AcademicRecords ar ON s.StudentID = ar.StudentID
+    WHERE ar.TeacherID = $teacherID
+    GROUP BY atr.StudentID, atr.RecommendedStrategy 
+    LIMIT 5";
+$teachingRecs = $conn->query($recsQuery)->fetchAll(PDO::FETCH_ASSOC);
+
 ?>
 
 <!DOCTYPE html>
@@ -118,17 +170,22 @@ $studentAlerts = $conn->query($alertsQuery)->fetchAll(PDO::FETCH_ASSOC);
         </table>
       </div>
 
-      <div class="panel">
-        <h2 style="color: #28a745; border-bottom-color: #28a745;">💡 Smart Lesson Recommendations</h2>
-        <p style="color: #6c757d;">Suggested strategies for your current highest-risk students (based on `AI_TeachingRecommendations`).</p>
-        <ul style="list-style: disc; padding-left: 20px; margin-top: 15px; color: #343a40;">
-            <!-- Placeholder for fetching actual recommendations for high-risk students -->
-            <li>Jacob Lopez (ADHD): Provide movement breaks.</li>
-            <li>Jasper Reyes (Visual Imp.): Prepare large print materials.</li>
-            <li>Hannah De Leon (Dyslexia): Use audio materials for readings.</li>
-        </ul>
-      </div>
-    </div>
+<div class="panel">
+    <h2 style="color: #28a745; border-bottom-color: #28a745;">💡 Smart Lesson Recommendations</h2>
+    <p style="color: #6c757d;">Suggested strategies for your highest-risk students.</p>
+    <ul style="list-style: disc; padding-left: 20px; margin-top: 15px; color: #343a40;">
+        <?php if ($teachingRecs): ?>
+            <?php foreach ($teachingRecs as $rec): ?>
+                <li>
+                    **<?php echo htmlspecialchars($rec['FirstName'] . ' ' . $rec['LastName']); ?>** (<?php echo htmlspecialchars($rec['Disability'] ?: 'General'); ?>): 
+                    <?php echo htmlspecialchars($rec['RecommendedStrategy']); ?>
+                </li>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <li>No recent AI recommendations for your students.</li>
+        <?php endif; ?>
+    </ul>
+</div>
 
     <!-- Right Panel: Grading Queue -->
     <div>

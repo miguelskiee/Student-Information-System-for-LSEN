@@ -1,5 +1,6 @@
 <?php
 // pages/dashboard.php
+
 // Add these 3 lines to see errors!
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -8,14 +9,65 @@ error_reporting(E_ALL);
 // Assuming the correct path is '../utils/db.php' based on previous structure
 include '../model/db.php'; 
 
+// ============================================
+// AI MODEL EXECUTION LOGIC (UPDATED PATH)
+// ============================================
+
+// 1. Configuration
+// *** CORRECT PATH based on your file structure: pages/ -> model/model.py ***
+$python_script_path = '../model/model.py'; 
+// Define a minimum interval (e.g., 60 seconds) to prevent excessive runs
+$min_run_interval_seconds = 60; 
+
+// 2. Check Last Run Time (Using the SystemJobs table for a lock)
+try {
+    // Check for the most recent successful inference job
+    $stmt = $conn->prepare("
+        SELECT UNIX_TIMESTAMP(CompletedAt) AS LastRunTime 
+        FROM SystemJobs 
+        WHERE JobName = 'ML_Inference' AND Status = 'Completed' 
+        ORDER BY CompletedAt DESC 
+        LIMIT 1
+    ");
+    $stmt->execute();
+    $last_run_time = $stmt->fetchColumn();
+
+    // Default to a low time if no record exists, forcing a run
+    $last_run_time = $last_run_time ?: 0; 
+    $current_time = time();
+    $time_since_last_run = $current_time - $last_run_time;
+
+    // 3. Conditional Execution
+    if ($time_since_last_run >= $min_run_interval_seconds) {
+        // --- Execute the Python Script Asynchronously ---
+        
+        // Use 'python3' or 'python' depending on your server setup.
+        // The command runs the script in the background and silences output.
+        // It uses '..' to navigate up one directory level.
+        $command = "python3 " . escapeshellarg($python_script_path) . " > /dev/null 2>&1 &";
+        exec($command);
+        
+        error_log("ML script triggered (Time since last run: {$time_since_last_run}s)");
+    } 
+    // else: The script has run too recently, skipping execution.
+
+} catch (PDOException $e) {
+    // Database error during lock check 
+    error_log("ML SystemJobs check failed: " . $e->getMessage());
+}
+
+
+// ============================================
+// DASHBOARD DATA FETCH (ORIGINAL LOGIC)
+// ============================================
+
 // 1. FETCH COUNTS
 $studentCount = $conn->query("SELECT COUNT(*) FROM Students")->fetchColumn();
 $teacherCount = $conn->query("SELECT COUNT(*) FROM Teachers")->fetchColumn();
 $subjectCount = $conn->query("SELECT COUNT(*) FROM Subjects")->fetchColumn();
-$termCount = 4;
+$termCount = 4; // Hardcoded, ideally fetched from AcademicRecords
 
-// 2. FETCH AI ALERTS (The "Missing" Feature)
-// Query is UPDATED to fetch StudentID and Disability for actionable insight
+// 2. FETCH AI ALERTS
 $alertQuery = "
     SELECT 
         s.StudentID, s.FirstName, s.LastName, s.GradeLevel, s.Section, s.Disability,
