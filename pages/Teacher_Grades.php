@@ -51,13 +51,13 @@ $gradingQueue = $stmtQueue->fetchAll(PDO::FETCH_ASSOC);
   <meta charset="UTF-8">
   <title>My Grades</title>
   <style>
-    body { background-color: #f4f7f9; color: #333; padding: 20px; font-family: Arial, sans-serif; }
+        body { background-color: #f4f7f9; color: #333; padding: 0 20px; font-family: sans-serif; margin-top: 25px;}
     .header h1 { color: #007bff; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; margin-bottom: 25px; }
     
     .grid-container { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
     
     /* CLASS CARDS */
-    .class-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; border-left: 5px solid #007bff; }
+    .class-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 25px; border-left: 5px solid #007bff; }
     .class-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     .class-title { font-size: 1.2rem; font-weight: bold; color: #343a40; }
     .class-meta { color: #6c757d; font-size: 0.9rem; }
@@ -118,7 +118,7 @@ $gradingQueue = $stmtQueue->fetchAll(PDO::FETCH_ASSOC);
     </div>
 
     <div>
-        <div class="panel">
+        <div class="panel" style="margin-top: 40px;">
             <h3 style="color: #dc3545; margin-top: 0;">⚠️ AI Review Queue</h3>
             <p style="font-size: 0.85rem; color: #666;">Low confidence grades needing manual override.</p>
             

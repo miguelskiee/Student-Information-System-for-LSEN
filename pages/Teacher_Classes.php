@@ -23,7 +23,7 @@ $myClasses = $assignmentsStmt->fetchAll(PDO::FETCH_ASSOC);
   <meta charset="UTF-8">
   <title>My Classes & Grading</title>
   <style>
-    body { background-color: #f4f7f9; color: #333; padding: 20px; }
+    body { background-color: #f4f7f9; color: #333; padding: 0 20px; font-family: sans-serif; margin-top: 25px;}
     .header h1 { color: #007bff; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; margin-bottom: 25px; }
     /* Changed grid to single column since right panel is removed */
     .panel-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
@@ -31,21 +31,17 @@ $myClasses = $assignmentsStmt->fetchAll(PDO::FETCH_ASSOC);
     h2 { color: #343a40; margin-bottom: 15px; border-left: 5px solid #28a745; padding-left: 10px; }
     .data-table { width: 100%; border-collapse: collapse; }
     .data-table th, .data-table td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; }
-    .data-table th { background-color: #f8f9fa; color: #495057; }
+    .data-table th { background-color: #004080; color: #ffffff; }
+    .data-table td { background-color: white; padding: 22px 15px;}
+
     .action-link { text-decoration: none; margin: 0 5px; }
   </style>
 </head>
 <body>
   <div class="header"><h1>📝 My Classes</h1></div>
-
-  <div class="panel-grid">
-    <div class="panel">
-      <h2>My Classes</h2>
-      <p style="color: #6c757d; margin-bottom: 15px;">Sections where you are the primary instructor.</p>
-      
       <table class="data-table">
         <thead>
-          <tr><th>Subject</th><th>Section</th><th>Actions</th></tr>
+          <tr><th style="border-top-left-radius: 8px;">Subject</th><th>Section</th><th style="border-top-right-radius: 8px;">Actions</th></tr>
         </thead>
         <tbody>
           <?php foreach ($myClasses as $class): ?>
@@ -62,8 +58,6 @@ $myClasses = $assignmentsStmt->fetchAll(PDO::FETCH_ASSOC);
           <?php endforeach; ?>
         </tbody>
       </table>
-    </div>
-    
-    </div>
+
 </body>
 </html>

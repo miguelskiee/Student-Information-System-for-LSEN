@@ -46,7 +46,7 @@ $mySubjects = $subStmt->fetchAll(PDO::FETCH_ASSOC);
   <meta charset="UTF-8">
   <title>Manage Assignments</title>
   <style>
-    body { background-color: #f4f7f9; color: #333; padding: 20px; font-family: Arial, sans-serif; }
+    body { background-color: #f4f7f9; color: #333; padding: 20px; font-family: Arial, sans-serif; margin-top: 5px;}
     .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; margin-bottom: 25px; }
     .header h1 { color: #007bff; margin: 0; }
     
@@ -65,11 +65,23 @@ $mySubjects = $subStmt->fetchAll(PDO::FETCH_ASSOC);
     .type-project { background-color: #28a745; }
     .type-exam { background-color: #dc3545; }
     
-    .btn { padding: 8px 12px; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 0.9rem; border: none; cursor: pointer; }
-    .btn-primary { background-color: #007bff; color: white; }
-    .btn-edit { color: #007bff; background: none; }
-    .btn-delete { color: #dc3545; background: none; }
-    .btn-delete:hover { text-decoration: underline; }
+    .add-btn {
+        background-color: #007bff;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-size: 0.95rem;
+        font-weight: bold;
+    }
+
+    .add-btn:hover, .search-btn:hover { background-color: #0056b3; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th, .data-table td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; }
+    .data-table th { background-color: #004080; color: #ffffff; }
+    .data-table td { background-color: white; padding: 22px 15px;}
+
   </style>
   <script>
     function filterBySubject() {
@@ -87,7 +99,7 @@ $mySubjects = $subStmt->fetchAll(PDO::FETCH_ASSOC);
 <body>
   <div class="header">
     <h1>📚 Assignments Manager</h1>
-    <a href="assignment_form.php" class="btn btn-primary">➕ Create New Assignment</a>
+    <a href="assignment_form.php" class="add-btn">Create New Assignment</a>
   </div>
 
   <div class="controls">
@@ -101,16 +113,15 @@ $mySubjects = $subStmt->fetchAll(PDO::FETCH_ASSOC);
     </select>
   </div>
 
-  <div class="panel">
     <table class="data-table">
       <thead>
         <tr>
-          <th>Title</th>
+          <th style="border-top-left-radius: 8px;">Title</th>
           <th>Subject</th>
           <th>Type</th>
           <th>Max Score</th>
           <th>Due Date</th>
-          <th>Actions</th>
+          <th style="border-top-right-radius: 8px;">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -138,6 +149,5 @@ $mySubjects = $subStmt->fetchAll(PDO::FETCH_ASSOC);
         <?php endif; ?>
       </tbody>
     </table>
-  </div>
 </body>
 </html>

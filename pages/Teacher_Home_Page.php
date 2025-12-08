@@ -31,8 +31,7 @@ $navItems = [
     'Assignments'   => 'Teacher_Assignments.php',
     'Grades'        => 'Teacher_Grades.php',  
     'Students'      => 'Teacher_Students.php',
-    'Classes/Attendance'       => 'Teacher_Classes.php',
-    'Profile'       => 'Profile_Page.php', 
+    'Classes'       => 'Teacher_Classes.php',
 ];
 ?>
 <!DOCTYPE html>
@@ -42,6 +41,7 @@ $navItems = [
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SIS - Teacher Portal</title>
   <link rel="stylesheet" href="../styles/homepage.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
   <div class="container">
@@ -50,7 +50,12 @@ $navItems = [
         <img src="../assets/school_pics/sagadl.png" alt="SIS Logo">
         <div class="navbar-title">Sagad High School SIS</div>
       </div>
-      <div class="navbar-links"></div>
+     <div class="nav-center-title">Teacher Dashboard</div>
+
+        <a href="#" onclick="loadPage('../pages/Profile_Page.php', event)">
+          <i class="fa-solid fa-user" style="font-size: 25px; margin-left: 10px; margin-right: 5px; color: white;"></i>
+        </a>
+      </div>
     </nav>
 
     <aside class="sidebar">
@@ -62,7 +67,13 @@ $navItems = [
 
       <ul>
         <?php foreach ($navItems as $label => $file): ?>
-            <li><a href="#" onclick="loadPage('../pages/<?php echo $file; ?>', event)"><?php echo $label; ?></a></li>
+            <li>
+              <a href="#" 
+                id="<?php echo ($label === 'Dashboard') ? 'dashboard-link' : ''; ?>" 
+                onclick="loadPage('../pages/<?php echo $file; ?>', event)">
+                <?php echo $label; ?>
+              </a>
+            </li>
         <?php endforeach; ?>
       </ul>
 
@@ -81,9 +92,18 @@ $navItems = [
     function loadPage(pageUrl, event) {
       event.preventDefault();
       document.getElementById('dashboard-frame').src = pageUrl;
+      
+      // Remove active class from all links
       document.querySelectorAll('.sidebar a').forEach(link => link.classList.remove('active'));
+      
+      // Add active class to the clicked link
       event.target.classList.add('active');
     }
+
+    // Set default active page (Dashboard)
+    window.onload = () => {
+      document.getElementById('dashboard-link').classList.add('active');
+    };
   </script>
 </body>
 </html>

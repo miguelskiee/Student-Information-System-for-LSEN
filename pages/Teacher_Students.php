@@ -11,10 +11,14 @@ $sectionsStmt = $conn->prepare("SELECT DISTINCT Section FROM TeacherAssignments 
 $sectionsStmt->execute([$teacherID]);
 $mySections = $sectionsStmt->fetchAll(PDO::FETCH_COLUMN);
 
+// --- SEARCH LOGIC ---
+$search = $_GET['search'] ?? '';
+$searchParam = "%{$search}%";
+
 // --- 2. FILTER LOGIC ---
 $sectionFilter = $_GET['section'] ?? null;
-$whereClause = "ta.TeacherID = ?";
-$params = [$teacherID];
+$whereClause = "ta.TeacherID = ? AND (s.FirstName LIKE ? OR s.LastName LIKE ? OR s.Section LIKE ?)";
+$params = [$teacherID, $searchParam, $searchParam, $searchParam];
 
 if ($sectionFilter) {
     $whereClause .= " AND ta.Section = ?";
@@ -22,7 +26,13 @@ if ($sectionFilter) {
 }
 
 // --- 3. SORTING LOGIC ---
-$allowed_columns = ['name' => 's.LastName', 'grade' => 's.GradeLevel', 'disability' => 's.Disability', 'risk' => 'apa.RiskLevel'];
+$allowed_columns = [
+    'name' => 's.LastName',
+    'grade' => 's.GradeLevel',
+    'disability' => 's.Disability',
+    'risk' => 'apa.RiskLevel'
+];
+
 $sort_by = $_GET['sort'] ?? 'name';
 $sort_dir = $_GET['dir'] ?? 'ASC';
 $order_column = $allowed_columns[$sort_by] ?? 's.LastName';
@@ -35,9 +45,9 @@ function get_next_dir($current_col, $req_col, $current_dir) {
 
 function getRiskBadge($risk) {
     switch ($risk) {
-        case 'High': return '<span style="color: white; background-color: #dc3545; padding: 4px 8px; border-radius: 4px; font-weight: bold;">HIGH 🚨</span>';
-        case 'Medium': return '<span style="color: #333; background-color: #ffc107; padding: 4px 8px; border-radius: 4px; font-weight: bold;">MEDIUM ⚠️</span>';
-        default: return '<span style="color: white; background-color: #28a745; padding: 4px 8px; border-radius: 4px;">Normal</span>';
+        case 'High': return '<span style="color: white; background-color: #dc3545; padding: 8px 32px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">HIGH</span>';
+        case 'Medium': return '<span style="color: #333; background-color: #ffc107; padding: 8px 22px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">MEDIUM</span>';
+        default: return '<span style="color: white; background-color: #28a745; padding: 8px 20px; border-radius: 4px; font-size: 0.85rem;">NORMAL</span>';
     }
 }
 
@@ -48,9 +58,8 @@ $studentQuery = $conn->prepare("
         apa.RiskLevel
     FROM Students s
     JOIN TeacherAssignments ta ON s.Section = ta.Section
-    LEFT JOIN AI_PerformanceAlerts apa ON s.StudentID = apa.StudentID AND apa.AlertID = (
-        SELECT MAX(AlertID) FROM AI_PerformanceAlerts WHERE StudentID = s.StudentID
-    )
+    LEFT JOIN AI_PerformanceAlerts apa ON s.StudentID = apa.StudentID 
+         AND apa.AlertID = (SELECT MAX(AlertID) FROM AI_PerformanceAlerts WHERE StudentID = s.StudentID)
     WHERE $whereClause
     ORDER BY $order_column $order_direction
 ");
@@ -60,84 +69,118 @@ $students = $studentQuery->fetchAll(PDO::FETCH_ASSOC);
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Student List</title>
-  <style>
+<meta charset="UTF-8">
+<title>Student List</title>
+<style>
     body { background-color: #f4f7f9; color: #333; padding: 20px; font-family: Arial, sans-serif; }
-    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; margin-bottom: 25px; }
-    .header h1 { color: #007bff; margin: 0; margin-right: 20px; }
-    
-    .table-container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); }
+
+    .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; margin-bottom: 15px; }
+    .header h1 { color: #007bff; margin: 0; }
+
+    /* Search Bar */
+    .search-box { margin: 15px 0; display: flex; gap: 10px; }
+    .search-box input {
+        padding: 10px;
+        width: 100%;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    .search-btn {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 25px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+    .search-btn:hover { background-color: #0056b3; }
+
+    /* Filter */
+    .filter-select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+    .btn-filter { background: #007bff; color: white; padding: 8px 14px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; }
+    .btn-filter:hover { background: #0056b3; }
+
+    .btn-back { background: #6c757d; color: white; padding: 8px 14px; border-radius: 4px; text-decoration: none; font-weight: bold; }
+
+    /* Table */
+    .table-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
     .data-table { width: 100%; border-collapse: collapse; }
     .data-table th, .data-table td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; }
-    .data-table th { background-color: #f8f9fa; color: #495057; }
-    
-    .action-link { color: #007bff; text-decoration: none; font-weight: 600; margin-right: 10px; }
-    
-    /* Filter Styles */
-    .filter-group { display: flex; align-items: center; gap: 10px; }
-    .filter-select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; }
-    .btn-filter { background-color: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-    .btn-filter:hover { background-color: #0056b3; }
-    .btn-back { background: #6c757d; color: white; padding: 8px 12px; border-radius: 4px; text-decoration: none; font-size: 0.9rem; font-weight: bold; }
-  </style>
+    .data-table th { background-color: #004080; color: #ffffff; }
+    .data-table td { background-color: white; padding: 22px 15px;}
+
+
+    .action-link { color: #007bff; text-decoration: none; font-weight: bold; }
+</style>
 </head>
 <body>
-  <div class="header">
-    <div class="filter-group">
-        <h1>🧑‍🎓 Student List</h1>
-        
-        <form method="GET" style="margin: 0; display: flex; gap: 5px;">
-            <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort_by); ?>">
-            <input type="hidden" name="dir" value="<?php echo htmlspecialchars($sort_dir); ?>">
-            
-            <select name="section" class="filter-select">
-                <option value="">All Sections</option>
-                <?php foreach ($mySections as $sec): ?>
-                    <option value="<?php echo htmlspecialchars($sec); ?>" <?php echo ($sec == $sectionFilter) ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($sec); ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <button type="submit" class="btn-filter">Filter</button>
-        </form>
-    </div>
+
+<div class="header">
+    <h1>🧑‍🎓 Student List</h1>
 
     <?php if ($sectionFilter): ?>
         <a href="Teacher_Grades.php" class="btn-back">&larr; Back to Gradebook</a>
     <?php endif; ?>
-  </div>
+</div>
 
-  <div class="table-container">
+<!-- SEARCH BAR -->
+<form class="search-box" method="GET">
+    <input type="text" name="search" placeholder="Search students..." value="<?php echo htmlspecialchars($search); ?>">
+
+    <?php if ($sectionFilter): ?>
+        <input type="hidden" name="section" value="<?php echo htmlspecialchars($sectionFilter); ?>">
+    <?php endif; ?>
+
+    <button class="search-btn">Search</button>
+</form>
+
+<!-- FILTER SECTION -->
+<form method="GET" style="margin-bottom: 20px; display: flex; gap: 10px;">
+    <select name="section" class="filter-select">
+        <option value="">All Sections</option>
+        <?php foreach ($mySections as $sec): ?>
+            <option value="<?php echo htmlspecialchars($sec); ?>" <?php echo ($sec == $sectionFilter) ? 'selected' : ''; ?>>
+                <?php echo htmlspecialchars($sec); ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
+    <button class="btn-filter">Filter</button>
+</form>
+
     <table class="data-table">
-      <thead>
-        <tr>
-            <th><a href="?sort=name&dir=<?php echo get_next_dir($sort_by, 'name', $sort_dir); ?>&section=<?php echo $sectionFilter; ?>">Name</a></th>
-            <th>Grade/Section</th>
-            <th>Disability</th>
-            <th>Risk Status</th>
-            <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php if (empty($students)): ?>
-            <tr><td colspan="5" style="text-align: center; padding: 20px; color: #6c757d;">No students found for this filter.</td></tr>
-        <?php else: ?>
-            <?php foreach ($students as $s): ?>
-              <tr>
-                <td><?php echo htmlspecialchars($s['LastName'] . ', ' . $s['FirstName']); ?></td>
-                <td><?php echo htmlspecialchars($s['Section']); ?></td>
-                <td><?php echo htmlspecialchars($s['Disability']); ?></td>
-                <td><?php echo getRiskBadge($s['RiskLevel']); ?></td>
-                <td>
-                  <a href="grade_entry.php?student_id=<?php echo $s['StudentID']; ?>" class="action-link">📝 Grade</a>
-                  <a href="student_profile.php?id=<?php echo $s['StudentID']; ?>" class="action-link" style="color: #6c757d;">👤 Profile</a>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-        <?php endif; ?>
-      </tbody>
+        <thead>
+            <tr>
+                <th style="border-top-left-radius: 8px; width: 35%;">Name</th>
+                <th style="width: 20%;">Grade / Section</th>
+                <th style="width: 20%;"">Disability</th>
+                <th style="width: 15%;">Risk Status</th>
+                <th style="border-top-right-radius: 8px; width: 10%;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (empty($students)): ?>
+                <tr><td colspan="5" style="text-align:center; padding:20px; color:#6c757d;">No matching students found.</td></tr>
+            <?php else: ?>
+                <?php foreach ($students as $s): ?>
+                <tr>
+                    <td>
+                        <a href="student_profile.php?id=<?php echo $s['StudentID']; ?>"
+                           style="color:#007bff; font-weight:bold; text-decoration:none;">
+                            <?php echo htmlspecialchars($s['LastName'] . ', ' . $s['FirstName']); ?>
+                        </a>
+                    </td>
+                    <td><?php echo htmlspecialchars($s['Section']); ?></td>
+                    <td><?php echo htmlspecialchars($s['Disability']); ?></td>
+                    <td><?php echo getRiskBadge($s['RiskLevel']); ?></td>
+                    <td>
+                        <a href="grade_entry.php?student_id=<?php echo $s['StudentID']; ?>" class="action-link">📝 Grade</a>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tbody>
     </table>
-  </div>
+
 </body>
 </html>
