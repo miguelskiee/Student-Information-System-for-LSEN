@@ -8,7 +8,9 @@ from sklearn.preprocessing import StandardScaler
 import sys
 
 # --- CONFIGURATION ---
-RISK_THRESHOLD = 0.5  # Testing the custom sensitivity threshold
+RISK_THRESHOLD = 0.3          # Lower = Safer (Catches more risks)
+GRADE_THRESHOLD = 75          # Failing Grade
+BEHAVIOR_POINTS_THRESHOLD = 10 # Behavior Risk Limit
 
 # ============================================
 # HELPER: PREVIOUS TERM
@@ -43,13 +45,16 @@ PREVIOUS_TERM = get_previous_term(CURRENT_TERM)
 
 print(f"--- MODEL EVALUATION MODE ---")
 print(f"Testing on Data from: {CURRENT_TERM}")
+print(f"Risk Definition: Grade < {GRADE_THRESHOLD} OR Behavior > {BEHAVIOR_POINTS_THRESHOLD} Points")
 
-# Fetch Data
+# Fetch Data (ALIGNED WITH ACTUAL MODEL: Includes Behavior Records)
 query = f"""
 SELECT 
     s.StudentID, s.Disability, ar.Score, ar.Term, ar.AttendanceDays, 
     bd.AttentionSpanMinutes, bd.ClassParticipation,
-    sph.Grade AS HistoricalGrade, sph.AttendanceRate AS HistoryAttendanceRate, sph.BehaviorScore AS HistoryBehaviorScore
+    sph.Grade AS HistoryGrade, sph.AttendanceRate AS HistoryAttendance, sph.BehaviorScore AS HistoryBehaviorScore,
+    -- Fetch Total Behavior Points (Live Data)
+    COALESCE((SELECT SUM(points) FROM behavior_records WHERE student_id = s.StudentID), 0) as CurrentBehaviorPoints
 FROM Students s
 LEFT JOIN AcademicRecords ar ON s.StudentID = ar.StudentID
 LEFT JOIN BehavioralData bd ON s.StudentID = bd.StudentID AND bd.DateObserved = (
@@ -64,7 +69,7 @@ raw_data = cursor.fetchall()
 columns = [
     "StudentID", "Disability", "Score", "Term", "AttendanceDays", 
     "AttentionSpan", "Participation", "HistoryGrade", 
-    "HistoryAttendance", "HistoryBehaviorScore"
+    "HistoryAttendance", "HistoryBehaviorScore", "CurrentBehaviorPoints"
 ]
 df_raw = pd.DataFrame(raw_data, columns=columns)
 
@@ -73,28 +78,41 @@ if df_raw.empty:
     sys.exit()
 
 # ============================================
-# 2. FEATURE ENGINEERING (Must Match Model.py)
+# 2. FEATURE ENGINEERING
 # ============================================
 participation_map = {"Poor": 1, "Average": 2, "Good": 3, "Excellent": 4}
 df_raw["ParticipationScore"] = df_raw["Participation"].map(participation_map)
 
+# Aggregate current term stats
 agg_features = df_raw.groupby('StudentID').agg(
     GPA_Current=('Score', 'mean'),
-    Grade_Volatility=('Score', 'std'),
+    Total_Behavior=('CurrentBehaviorPoints', 'max'), # Take max/sum to be safe
     Attendance_Rate_Current=('AttendanceDays', lambda x: x.iloc[0] / x.iloc[0] if x.iloc[0] > 0 else 0)
 ).reset_index()
 
+# Merge back
 df_final = df_raw.drop_duplicates(subset=['StudentID']).set_index('StudentID').join(
     agg_features.set_index('StudentID'), how='left'
 )
 
-df_final["HistoryGrade"] = pd.to_numeric(df_final["HistoryGrade"], errors='coerce').fillna(df_final["GPA_Current"])
-df_final["Grade_Trend"] = df_final["GPA_Current"] - df_final["HistoryGrade"]
+# Handle Missing History
+df_final["HistoryGrade"] = pd.to_numeric(df_final["HistoryGrade"], errors='coerce').fillna(80)
+df_final["HistoryAttendance"] = pd.to_numeric(df_final["HistoryAttendance"], errors='coerce').fillna(1.0)
 
+# --- CALCULATE DRIFT ---
+df_final["Attendance_Drop"] = df_final["Attendance_Rate_Current"] - df_final["HistoryAttendance"]
+
+# --- SELECT FEATURES FOR TRAINING ---
+# NOTE: We keep GPA_Current OUT of X to keep it predictive (no cheating).
+# We add Total_Behavior to X because that is observable live.
 df_features = df_final[[
-    "GPA_Current", "Grade_Volatility", "Attendance_Rate_Current",
-    "HistoryGrade", "HistoryAttendance", "HistoryBehaviorScore",
-    "ParticipationScore", "AttentionSpan", "Grade_Trend"
+    "Attendance_Rate_Current", 
+    "Attendance_Drop",          
+    "Total_Behavior",           # <--- ALIGNED: Uses live behavior points
+    "HistoryGrade", 
+    "HistoryAttendance", 
+    "ParticipationScore", 
+    "AttentionSpan"
 ]].fillna(0).infer_objects(copy=False)
 
 # ============================================
@@ -102,49 +120,50 @@ df_features = df_final[[
 # ============================================
 
 X = df_features.values
-# Ground Truth: 1 if GPA < 75 (At Risk), 0 otherwise
-y = (df_final["GPA_Current"] < 75).astype(int) 
+
+# --- ALIGNED TARGET DEFINITION ---
+# Risk = Failing Grade OR High Behavior Points (Same as Actual Model)
+y = ((df_final["GPA_Current"] < GRADE_THRESHOLD) | (df_final["Total_Behavior"] > BEHAVIOR_POINTS_THRESHOLD)).astype(int)
 
 # Scale
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# SPLIT: 70% for Training, 30% for Testing
+# SPLIT
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
 
-# Train
-rf = RandomForestClassifier(n_estimators=200, random_state=42)
+# Train with Balanced Weights (Forces AI to catch the few At-Risk cases)
+rf = RandomForestClassifier(n_estimators=200, class_weight='balanced', random_state=42)
 rf.fit(X_train, y_train)
 
-# --- STANDARD METRICS (0.5 Threshold) ---
+# --- STANDARD METRICS (0.5) ---
 print("\n" + "="*40)
 print("  STANDARD EVALUATION (Threshold 0.5)")
 print("="*40)
 y_pred_standard = rf.predict(X_test)
 print(classification_report(y_test, y_pred_standard, target_names=['Safe', 'At-Risk']))
-print("Confusion Matrix (Standard):")
 print(confusion_matrix(y_test, y_pred_standard))
 
-# --- CUSTOM THRESHOLD METRICS (0.3 Threshold) ---
+# --- CUSTOM SENSITIVITY METRICS ---
 print("\n" + "="*40)
 print(f"  CUSTOM SENSITIVITY EVALUATION (Threshold {RISK_THRESHOLD})")
-print("  (Optimized for High Recall/Safety)")
+print("  (Optimized for Early Warning)")
 print("="*40)
 
-# Get probabilities instead of hard labels
 probs = rf.predict_proba(X_test)[:, 1]
-# Apply custom threshold
 y_pred_custom = (probs >= RISK_THRESHOLD).astype(int)
 
 print(classification_report(y_test, y_pred_custom, target_names=['Safe', 'At-Risk']))
-print(f"Accuracy: {accuracy_score(y_test, y_pred_custom):.2f}")
 print(f"Recall (At-Risk Catch Rate): {recall_score(y_test, y_pred_custom):.2f}")
 print("\nConfusion Matrix (Custom):")
 cm = confusion_matrix(y_test, y_pred_custom)
-print(f"True Negatives (Correctly Safe): {cm[0][0]}")
-print(f"False Positives (False Alarm):   {cm[0][1]}")
-print(f"False Negatives (Missed Risk):   {cm[1][0]}")
-print(f"True Positives (Caught Risk):    {cm[1][1]}")
+try:
+    print(f"True Negatives (Correctly Safe): {cm[0][0]}")
+    print(f"False Positives (False Alarm):   {cm[0][1]}")
+    print(f"False Negatives (Missed Risk):   {cm[1][0]}")
+    print(f"True Positives (Caught Risk):    {cm[1][1]}")
+except:
+    print(cm)
 
 cursor.close()
 db.close()
