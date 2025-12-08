@@ -39,7 +39,7 @@ $disabilityOptions = [
   <meta charset="UTF-8">
   <title><?php echo $action; ?> Student</title>
   <style>
-    body { background-color: #f4f7f9; color: #333; padding: 20px; }
+    body { background-color: #f4f7f9; color: #333; padding: 0 20px; font-family: sans-serif; margin-top: 25px;}
     .form-container { background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); max-width: 800px; margin: 0 auto; }
     .header h1 { color: #007bff; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; margin-bottom: 25px; }
     .form-group { margin-bottom: 15px; }

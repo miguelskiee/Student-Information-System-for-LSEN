@@ -39,14 +39,16 @@ $avgGPA = json_encode(array_column($disabilityStats, 'AvgGPA'));
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     /* ... (CSS styling remains the same as previous response) ... */
-    body { background-color: #f4f7f9; color: #333; padding: 20px; }
+    body { background-color: #f4f7f9; color: #333; padding: 0 20px; font-family: sans-serif; margin-top: 10px;}
     .header h1 { color: #007bff; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; margin-bottom: 25px; }
-    .panel { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); margin-bottom: 20px; }
-    h2 { color: #343a40; border-left: 5px solid #ffc107; padding-left: 10px; margin-bottom: 15px; }
+    .panel { background-color: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); margin-bottom: 20px; height: auto;}
+    .panel h2 { color: #343a40; border-left: 5px solid #284ca7ff; padding-left: 20px; margin-bottom: 15px; font-size: 1.4rem; }
     .data-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
     .data-table th, .data-table td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; }
     .data-table th { background-color: #f8f9fa; color: #495057; }
     .chart-container { height: 350px; margin-bottom: 30px; }
+    .panel { background-color: white; padding-left: 25px; padding-right: 25px; padding-top: 10px; padding-bottom: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); margin-bottom: 20px; }
+
   </style>
 </head>
 <body>

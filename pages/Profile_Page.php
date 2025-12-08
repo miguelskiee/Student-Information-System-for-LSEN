@@ -32,8 +32,9 @@ function display_profile_data($array, $key, $default = 'N/A') {
 <head>
   <meta charset="UTF-8">
   <title>User Profile</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
   <style>
-    body { background-color: #f4f7f9; color: #333; padding: 20px; }
+    body { background-color: #f4f7f9; color: #333; padding: 0 20px; font-family: sans-serif; margin-top: 25px;}
     .header h1 { color: #007bff; border-bottom: 2px solid #dee2ee; padding-bottom: 10px; margin-bottom: 25px; }
     .content-container { max-width: 800px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); }
     h2 { color: #343a40; margin-top: 20px; border-left: 5px solid #007bff; padding-left: 10px; }

@@ -14,10 +14,11 @@ $jobStatus = $conn->query("
 <head>
   <meta charset="UTF-8">
   <title>System Settings</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
   <style>
-    body { background-color: #f4f7f9; color: #333; padding: 20px; }
+    body { background-color: #f4f7f9; color: #333; padding: 0 20px; font-family: sans-serif; margin-top: 25px;}
     .header h1 { color: #007bff; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; margin-bottom: 25px; }
-    .settings-group { background-color: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); margin-bottom: 20px; }
+    .settings-group { background-color: white; padding-left: 25px; padding-right: 25px; padding-top: 10px; padding-bottom: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); margin-bottom: 20px; }
     h2 { color: #343a40; margin-bottom: 15px; border-bottom: 1px dotted #ccc; padding-bottom: 5px; }
     .setting-item { margin-bottom: 10px; font-size: 1rem; }
     .setting-item strong { color: #007bff; }
@@ -31,10 +32,11 @@ $jobStatus = $conn->query("
   </style>
 </head>
 <body>
-  <div class="header"><h1>⚙️ System Settings</h1></div>
+  <div class="header"><h1><i class="fa-solid fa-gear" style="font-size: 32px; margin-left: 10px; margin-right: 5px; color: #2f2178ff;"></i>
+System Settings</h1></div>
 
   <div class="settings-group">
-    <h2>🤖 Machine Learning Model Management</h2>
+    <h2>Machine Learning Model Management</h2>
     <div class="setting-item">
         <strong>Last Job:</strong> 
         <?php echo $jobStatus ? htmlspecialchars($jobStatus['JobName']) : 'Inference'; ?>

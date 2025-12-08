@@ -9,13 +9,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = $_POST['email'] ?? '';
     $password = $_POST['password'] ?? ''; 
 
-    // 1. UPDATED QUERY: Added 'Password' to the SELECT list
     $stmt = $conn->prepare("SELECT TeacherID, FirstName, LastName, UserRole, Password FROM Teachers WHERE Email = ? LIMIT 1");
     $stmt->execute([$email]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // 2. UPDATED CHECK: Verify the password matches
-    // (This uses simple text comparison. For better security later, use password_verify)
     if ($user && $user['Password'] === $password) {
         
         // LOGIN SUCCESS
@@ -30,7 +27,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
         exit;
     } else {
-        $error = "Invalid email or password.";
+        $error = "Incorrect Email or Password";  
     }
 }
 ?>
@@ -49,33 +46,39 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
       align-items: center;
       min-height: 100vh;
     }
-    .form-container {
-      margin-top: 0; /* Override the margin from login.css to center it */
+    .error-line {
+      height: 1.5px;
+      background-color: #353ddcff;
+      margin-bottom: 20px;
     }
-    .error-msg {
+
+    .error-text {
+      display: none; 
       color: #dc3545;
+      font-weight: 600;
       margin-bottom: 10px;
-      font-weight: bold;
     }
   </style>
 </head>
 <body>
 
-  <div class="form-container">
     <div class="form-box">
-      <img src="../assets/school_pics/sagadl.png" alt="Logo" style="width: 80px; margin-bottom: 15px;">
+      <img src="../assets/school_pics/sagadl.png" alt="Logo" style="width: 18vh; margin-bottom: 15px;">
       
-      <h2>Welcome Back</h2>
+      <h2>Sagad High School</h2>
+      <!-- Line under the heading -->
+      <div class="error-line"></div>
       
-      <?php if($error): ?>
-        <div class="error-msg"><?php echo $error; ?></div>
-      <?php endif; ?>
-
+      <!-- Dynamic error message area -->
+      <div id="error-message" class="error-text">
+        <?php echo $error; ?>
+      </div>
+      
       <form method="POST" action="">
         <input type="email" name="email" placeholder="Email Address" required>
         <input type="password" name="password" placeholder="Password" required>
         
-        <button type="submit" style="background-color: #004080; color: white; padding: 10px; width: 100%; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 1rem;">
+        <button type="submit" style="margin-top: 10px;background-color: #004080; color: white; padding: 10px; width: 100%; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 1rem;">
           Login
         </button>
       </form>
@@ -83,7 +86,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
       <p style="margin-top: 15px; font-size: 0.9rem;">
       </p>
     </div>
-  </div>
+
+    <script>
+      <?php if ($error): ?>
+        // If there's an error, display the error message and remove it after 5 seconds
+        const errorMessage = document.getElementById('error-message');
+        errorMessage.style.display = 'block';
+        setTimeout(() => {
+          errorMessage.style.display = 'none';
+        }, 5000);  // Hide error after 5 seconds
+      <?php endif; ?>
+    </script>
 
 </body>
 </html>
