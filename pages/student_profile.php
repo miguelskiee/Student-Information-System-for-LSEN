@@ -1,17 +1,21 @@
 <?php
 // pages/student_profile.php
-// CORRECTED PATH: pages -> ../ -> model/db.php
 include '../model/db.php'; 
 
 $studentID = $_GET['id'] ?? die("Error: Student ID required."); 
 
-// --- 1. Fetch Student Core Data & Latest Alert ---
+// --- 1. Fetch Student Core Data, Risk, AND CURRENT ACADEMIC RECORD ---
 $stmt = $conn->prepare("
     SELECT s.*, 
         apa.RiskLevel, apa.PredictedIssue, apa.RiskProbability, apa.AnomalyScore,
-        t.FirstName AS TeacherFirstName, t.LastName AS TeacherLastName
+        t.FirstName AS TeacherFirstName, t.LastName AS TeacherLastName,
+        -- Fetch Current Academic Performance Data
+        ar.Score AS CurrentGrade,
+        ar.Term AS CurrentTerm,
+        ar.AttendanceDays,
+        ar.TotalPossibleDays
     FROM Students s
-    -- We use AcademicRecords to find the last teacher who recorded data for them
+    -- We use AcademicRecords to find the current performance
     LEFT JOIN AcademicRecords ar ON s.StudentID = ar.StudentID
     LEFT JOIN Teachers t ON ar.TeacherID = t.TeacherID
     -- Pull the latest AI alert record for the status
@@ -28,8 +32,13 @@ if (!$student) {
     die("Student record not found for ID: " . htmlspecialchars($studentID));
 }
 
-// --- 2. Fetch Detailed History (Academic and Behavioral/Attendance Logs) ---
-// Academic History (Past terms, for trend visualization)
+// Calculate Current Attendance Rate for display
+$currentAttendanceRate = 0;
+if (isset($student['AttendanceDays']) && isset($student['TotalPossibleDays']) && $student['TotalPossibleDays'] > 0) {
+    $currentAttendanceRate = ($student['AttendanceDays'] / $student['TotalPossibleDays']) * 100;
+}
+
+// --- 2. Fetch Detailed History (PAST Terms only) ---
 $history_records_stmt = $conn->prepare("
     SELECT Term, Grade, AttendanceRate, BehaviorScore 
     FROM StudentPerformanceHistory 
@@ -40,20 +49,37 @@ $history_records_stmt = $conn->prepare("
 $history_records_stmt->execute([$studentID]);
 $history_records = $history_records_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Behavioral Log (Combined Attendance and Observations)
-// Using UNION ALL to mix records from two tables (Attendance and Behavior Observations)
+// --- 3. Behavioral Log ---
 $behavior_logs_stmt = $conn->prepare("
-    SELECT Date, Status, Notes FROM SchoolAttendanceLogs WHERE StudentID = ?
+    -- 1. Attendance Logs: Convert text to utf8 to prevent collation errors
+    SELECT Date, CONVERT(Status USING utf8) as Status, CONVERT(Notes USING utf8) AS Detail 
+    FROM SchoolAttendanceLogs 
+    WHERE StudentID = ?
+    
     UNION ALL
-    SELECT DateObserved as Date, 'Observation' as Status, Notes FROM BehavioralData WHERE StudentID = ?
+    
+    -- 2. Behavioral Observations
+    SELECT DateObserved as Date, 'Observation' as Status, CONVERT(BehaviorInClass USING utf8) AS Detail 
+    FROM BehavioralData 
+    WHERE StudentID = ?
+    
+    UNION ALL
+
+    -- 3. AI/ML Behavior Records
+    SELECT record_date as Date, 'Behavior Record' as Status, CONVERT(behavior_type USING utf8) AS Detail
+    FROM behavior_records
+    WHERE student_id = ?
+
     ORDER BY Date DESC
     LIMIT 10
 ");
-$behavior_logs_stmt->execute([$studentID, $studentID]);
+
+// Execute the query passing the ID 3 times (once for each SELECT)
+$behavior_logs_stmt->execute([$studentID, $studentID, $studentID]);
 $behavior_logs = $behavior_logs_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
-// --- 3. Fetch AI Recommendations ---
+// --- 4. Fetch AI Recommendations ---
 $recs_stmt = $conn->prepare("
     SELECT RecommendedStrategy, Source, DateGenerated 
     FROM AI_TeachingRecommendations 
@@ -107,6 +133,9 @@ function getRiskBadge($risk, $is_large = false) {
     .data-table th, .data-table td { text-align: left; padding: 10px; border-bottom: 1px solid #eee; font-size: 0.9rem; }
     .data-table th { background-color: #f8f9fa; color: #495057; }
     
+    /* Highlight Current Term */
+    .current-term-row { background-color: #fff3cd; font-weight: bold; border-left: 4px solid #ffc107; }
+    
     .recs-list { list-style: none; padding-left: 0; }
     .recs-list li { border-bottom: 1px dotted #eee; padding: 8px 0; font-size: 0.95rem; }
   </style>
@@ -114,16 +143,23 @@ function getRiskBadge($risk, $is_large = false) {
 <body>
   <div class="header">
     <h1>🧑‍🎓 <?php echo htmlspecialchars($student['FirstName'] . ' ' . $student['LastName']); ?> 
-      <span style="font-size: 1.2rem; font-weight: normal; color: #6c757d;">(Grade: <?php echo htmlspecialchars($student['GradeLevel'] ?? 'N/A'); ?>)</span>
+      <span style="font-size: 1.2rem; font-weight: normal; color: #6c757d;">
+        (Current Grade: 
+        <?php 
+            // Display Current Grade in Header
+            echo isset($student['CurrentGrade']) 
+                ? htmlspecialchars($student['CurrentGrade']) 
+                : 'N/A'; 
+        ?>)
+      </span>
     </h1>
     <a href="student_form.php?id=<?php echo $studentID; ?>" style="float: right; color: #28a745; text-decoration: none; margin-top: -30px;">[Edit Student Profile]</a>
   </div>
 
   <div class="profile-grid">
-    <!-- LEFT COLUMN: CORE INFO, NOTES, RECOMMENDATIONS -->
     <div>
         <div class="panel">
-            <h2>General Information \& SPED Needs</h2>
+            <h2>General Information & SPED Needs</h2>
             <div class="data-row"><strong>Student ID:</strong> <?php echo htmlspecialchars($student['StudentID']); ?></div>
             <div class="data-row"><strong>Grade/Section:</strong> <?php echo htmlspecialchars($student['GradeLevel'] . ' - ' . $student['Section']); ?></div>
             <div class="data-row"><strong>Primary Disability:</strong> <span style="font-weight: bold; color: #007bff;"><?php echo htmlspecialchars($student['Disability'] ?? 'N/A'); ?></span></div>
@@ -163,7 +199,6 @@ function getRiskBadge($risk, $is_large = false) {
             <?php endif; ?>
         </div>
     
-    <!-- RIGHT COLUMN: AI STATUS, HISTORY, LOGS -->
     <div>
         <div class="panel risk-panel">
             <h2>🚨 Latest AI Risk Status</h2>
@@ -175,18 +210,28 @@ function getRiskBadge($risk, $is_large = false) {
                 <strong style="width: 80px;">Prediction:</strong> 
                 <span style="font-size: 1rem;"><?php echo htmlspecialchars($student['PredictedIssue'] ?? 'Normal'); ?></span>
             </div>
-            <div class="data-row" style="font-size: 0.9rem; color: #6c757d;">
+            <div class="data-row">
+                <strong style="width: 80px;">Confidence:</strong> 
             </div>
         </div>
 
         <div class="panel">
             <h2>📈 Academic History</h2>
-            <p style="color: #6c757d; margin-bottom: 10px;">Last 5 term records (used for trend calculation).</p>
+            <p style="color: #6c757d; margin-bottom: 10px;">Current Term vs. Historical Trends.</p>
             <table class="data-table">
                 <thead>
-                    <tr><th>Term</th><th>GPA</th><th>Attendance Rate</th><th>Behavior Score</th></tr>
+                    <tr><th>Term</th><th>GPA/Score</th><th>Attendance Rate</th><th>Behavior Score</th></tr>
                 </thead>
                 <tbody>
+                    <?php if (isset($student['CurrentGrade'])): ?>
+                    <tr class="current-term-row">
+                        <td><?php echo htmlspecialchars($student['CurrentTerm']); ?> <span style="font-size:0.7em; background:#333; color:#fff; padding:2px 4px; border-radius:3px;">LIVE</span></td>
+                        <td><?php echo htmlspecialchars($student['CurrentGrade']); ?></td>
+                        <td><?php echo round($currentAttendanceRate, 1) . '%'; ?></td>
+                        <td><small>See Logs</small></td>
+                    </tr>
+                    <?php endif; ?>
+
                     <?php if ($history_records): ?>
                         <?php foreach ($history_records as $hr): ?>
                             <tr>
@@ -197,25 +242,44 @@ function getRiskBadge($risk, $is_large = false) {
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <tr><td colspan="4">No historical performance data available.</td></tr>
+                        <?php if (!isset($student['CurrentGrade'])): ?>
+                            <tr><td colspan="4">No academic data available.</td></tr>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
         
-        <div class="panel">
-            <h2>📜 Recent Behavior \& Attendance Log</h2>
+<div class="panel">
+            <h2>📜 Recent Behavior & Attendance Log</h2>
             <table class="data-table">
                 <thead>
-                    <tr><th>Date</th><th>Type</th><th>Notes</th></tr>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Detail / Behavior Type</th>
+                    </tr>
                 </thead>
                 <tbody>
                     <?php if ($behavior_logs): ?>
                         <?php foreach ($behavior_logs as $log): ?>
                             <tr>
                                 <td><?php echo date('M d, Y', strtotime($log['Date'])); ?></td>
-                                <td><span style="color: <?php echo ($log['Status'] == 'Absent' || $log['Status'] == 'Late') ? '#dc3545' : ($log['Status'] == 'Observation' ? '#007bff' : '#28a745'); ?>; font-weight: 600;"><?php echo htmlspecialchars($log['Status']); ?></span></td>
-                                <td><?php echo htmlspecialchars(substr($log['Notes'], 0, 40)) . (strlen($log['Notes']) > 40 ? '...' : ''); ?></td>
+                                
+                                <td>
+                                    <span style="color: <?php 
+                                        echo ($log['Status'] == 'Absent' || $log['Status'] == 'Late') ? '#dc3545' : 
+                                             ($log['Status'] == 'Observation' ? '#007bff' : '#28a745'); 
+                                    ?>; font-weight: 600;">
+                                        <?php echo htmlspecialchars($log['Status']); ?>
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span style="background-color: #e9ecef; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; color: #495057;">
+                                        <?php echo htmlspecialchars($log['Detail']); ?>
+                                    </span>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
